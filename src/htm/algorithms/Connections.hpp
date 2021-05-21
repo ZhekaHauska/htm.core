@@ -456,6 +456,8 @@ public:
     return segments_[segment].cell;
   }
 
+  std::vector<CellIdx> mapSegmentsToCells(const std::vector<Segment>& segments);
+
   /**
    *  Collect all presynaptic cells for segments (inputs)
    *  @param 

@@ -262,6 +262,10 @@ void Connections::removeSynapseFromPresynapticMap_(
 
 void Connections::destroySegment(const Segment segment) {
 
+  if(std::find(destroyedSegments_.begin(), destroyedSegments_.end(), segment) != destroyedSegments_.end()) {
+    return;
+  }
+
   for (auto h : eventHandlers_) {
     h.second->onDestroySegment(segment);
   }
@@ -874,3 +878,11 @@ bool Connections::operator==(const Connections &o) const {
   return true;
 }
 
+std::vector<CellIdx> Connections::mapSegmentsToCells(const std::vector<Segment>& segments) {
+  std::vector<CellIdx> cells;
+  cells.reserve(segments.size());
+  for(const auto& segment: segments) {
+    cells.push_back(Connections::cellForSegment(segment));
+  }
+  return cells;
+}

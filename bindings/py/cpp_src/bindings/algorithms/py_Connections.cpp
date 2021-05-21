@@ -81,6 +81,8 @@ R"(Compatibility Warning: This classes API is unstable and may change without wa
 
     py_Connections.def("cellForSegment", &Connections::cellForSegment);
 
+    py_Connections.def("mapSegmentsToCells", &Connections::mapSegmentsToCells);
+
     py_Connections.def("idxOnCellForSegment", &Connections::idxOnCellForSegment);
 
     py_Connections.def("presynapticCellsForSegment", &Connections::presynapticCellsForSegment,
