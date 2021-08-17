@@ -262,10 +262,6 @@ void Connections::removeSynapseFromPresynapticMap_(
 
 void Connections::destroySegment(const Segment segment) {
 
-  if(std::find(destroyedSegments_.begin(), destroyedSegments_.end(), segment) != destroyedSegments_.end()) {
-    return;
-  }
-
   for (auto h : eventHandlers_) {
     h.second->onDestroySegment(segment);
   }
@@ -280,6 +276,7 @@ void Connections::destroySegment(const Segment segment) {
   CellData &cellData = cells_[segmentData.cell];
 
   const auto segmentOnCell = std::find(cellData.segments.cbegin(), cellData.segments.cend(), segment);
+  if (segmentOnCell == cellData.segments.cend()) return;
   NTA_ASSERT(segmentOnCell != cellData.segments.cend()) << "Segment to be destroyed not found on the cell!";
   NTA_ASSERT(*segmentOnCell == segment);
 
