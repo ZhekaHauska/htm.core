@@ -416,8 +416,20 @@ Argument output An SDR representing the winning columns after
         py_SpatialPooler.def("_inhibitColumns", inhibitColumns_func);
         py_SpatialPooler.def("inhibitColumns_", inhibitColumns_func);
 
+        // counter
+        py_SpatialPooler.def("_updateBookeepingVars", &SpatialPooler::updateBookeepingVars_);
+        // boosting
+        py_SpatialPooler.def("_updateDutyCycles", &SpatialPooler::updateDutyCycles_);
+        py_SpatialPooler.def("_bumpUpWeakColumns", &SpatialPooler::bumpUpWeakColumns_);
+        py_SpatialPooler.def("_updateBoostFactors", &SpatialPooler::updateBoostFactors_);
+        py_SpatialPooler.def("_isUpdateRound", &SpatialPooler::isUpdateRound_);
+        py_SpatialPooler.def("_updateInhibitionRadius", &SpatialPooler::updateInhibitionRadius_);
+        py_SpatialPooler.def("_updateMinDutyCycles", &SpatialPooler::updateMinDutyCycles_);
+        // learning
+        py_SpatialPooler.def("_adaptSynapses", py::overload_cast<const SDR &, const SDR &>(&SpatialPooler::adaptSynapses_));
+        py_SpatialPooler.def("_adaptSynapses", py::overload_cast<const SDR &, const SDR &, Permanence, Permanence>(&SpatialPooler::adaptSynapses_));
 
-        //////////////////////
+      //////////////////////
         // getIterationLearnNum
         py_SpatialPooler.def("getIterationLearnNum", &SpatialPooler::getIterationLearnNum);
 

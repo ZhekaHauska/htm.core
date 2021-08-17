@@ -704,6 +704,16 @@ void SpatialPooler::adaptSynapses_(const SDR &input,
   }
 }
 
+void SpatialPooler::adaptSynapses_(const SDR &input,
+                                   const SDR &active,
+                                   const Permanence permInc,
+                                   const Permanence permDec) {
+  for(const auto &column : active.getSparse()) {
+    connections_.adaptSegment(column, input, permInc, permDec);
+    connections_.raisePermanencesToThreshold( column, stimulusThreshold_ );
+  }
+}
+
 
 void SpatialPooler::bumpUpWeakColumns_() {
   for (size_t i = 0; i < numColumns_; i++) {

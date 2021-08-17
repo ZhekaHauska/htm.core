@@ -977,6 +977,8 @@ public:
    */
   void adaptSynapses_(const SDR &input, const SDR &active);
 
+  void adaptSynapses_(const SDR &input, const SDR &active, Permanence permInc, Permanence permDec);
+
   /**
       This method increases the permanence values of synapses of columns whose
       activity level has been too low. Such columns are identified by having an
