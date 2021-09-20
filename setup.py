@@ -283,7 +283,7 @@ def generateExtensions(platform, build_type):
 
     # build: make && make install
     if platform != "windows": #TODO since cmake 3.12 "-j4" is directly supported (=crossplatform), for now -- passes other options to make
-      subprocess.check_call(["cmake", "--build", ".", "--target", "install", "--config", build_type, "--", "-j", "4"]) 
+      subprocess.check_call(["cmake", "--build", ".", "--target", "install", "--config", build_type, "--", "-j", "8"]) 
     else:
       subprocess.check_call(["cmake", "--build", ".", "--target", "install", "--config", build_type])
   finally:
