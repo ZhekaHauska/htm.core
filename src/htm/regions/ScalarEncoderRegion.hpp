@@ -51,6 +51,7 @@ public:
   static Spec *createSpec();
 
   virtual Real64 getParameterReal64(const std::string &name, Int64 index = -1) const override;
+  virtual Real32 getParameterReal32(const std::string &name, Int64 index) const override;
   virtual UInt32 getParameterUInt32(const std::string &name, Int64 index = -1) const override;
   virtual bool getParameterBool(const std::string &name, Int64 index = -1) const override;
   virtual void setParameterReal64(const std::string &name, Int64 index, Real64 value) override;
@@ -76,6 +77,7 @@ public:
        cereal::make_nvp("size", params_.size),
        cereal::make_nvp("radius", params_.radius),
        cereal::make_nvp("resolution", params_.resolution),
+       cereal::make_nvp("category", params_.category),
        cereal::make_nvp("sensedValue_", sensedValue_));
   }
   // FOR Cereal Deserialization
@@ -95,6 +97,7 @@ public:
        cereal::make_nvp("size", params_.size),
        cereal::make_nvp("radius", params_.radius),
        cereal::make_nvp("resolution", params_.resolution),
+       cereal::make_nvp("category", params_.category),
        cereal::make_nvp("sensedValue_", sensedValue_));
     encoder_ = std::make_shared<ScalarEncoder>( params_ );
     setDimensions(encoder_->dimensions); 

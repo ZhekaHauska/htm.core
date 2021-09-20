@@ -92,25 +92,36 @@ Use "numpy.argmax" to find the category with the greatest probablility.)",
 
             py::arg("pattern"));
 
-        py_Classifier.def("learn", &Classifier::learn,
+        py_Classifier.def("learn", 
+          static_cast<void (htm::Classifier::*)(const htm::SDR&, const std::vector<UInt>&)>(&Classifier::learn),
 R"(Learn from example data.
-
 Argument pattern is the SDR containing the active input bits.
-
 Argument classification is the current category or bucket index.
 This may also be a list for when the input has multiple categories.)",
                 py::arg("pattern"),
                 py::arg("classification"));
 
-        py_Classifier.def("learn", [](Classifier &self, const SDR &pattern, UInt categoryIdx)
-            { self.learn( pattern, {categoryIdx} ); },
+        py_Classifier.def("learn", 
+          static_cast<void (htm::Classifier::*)(const htm::SDR&, UInt)>(&Classifier::learn),
                 py::arg("pattern"),
                 py::arg("classification"));
+                
+				// saving and loading from file
+        py_Classifier.def("saveToFile",
+         static_cast<void (htm::Classifier::*)(std::string, std::string) const>(&htm::Classifier::saveToFile), 
+         py::arg("file"), py::arg("fmt") = "BINARY",
+         "Serializes object to file. file: filename to write to.  fmt: format, one of 'BINARY', 'PORTABLE', 'JSON', or 'XML'.");
 
-        // TODO: Pickle support
+        py_Classifier.def("loadFromFile",    
+         static_cast<void (htm::Classifier::*)(std::string, std::string)>(&htm::Classifier::loadFromFile), 
+         py::arg("file"), py::arg("fmt") = "BINARY",
+         "Deserializes object from file. file: filename to read from.  fmt: format recorded by saveToFile(). ");
+
+
+
+        // Pickle support
 
         // pickle
-        // https://github.com/pybind/pybind11/issues/1061
         py_Classifier.def(py::pickle(
             [](const Classifier& self)
         {
@@ -197,7 +208,7 @@ Returns a dictionary whos keys are prediction steps, and values are PDFs.
 See help(Classifier.infer) for details about PDFs.)",
             py::arg("pattern"));
 
-        py_Predictor.def("learn", &Predictor::learn,
+        py_Predictor.def("learn", static_cast<void (htm::Predictor::*)(UInt, const htm::SDR&, const std::vector<UInt>&)>(&Predictor::learn),
 R"(Learn from example data.
 
 Argument recordNum is an incrementing integer for each record.
@@ -211,16 +222,24 @@ This may also be a list for when the input has multiple categories.)",
             py::arg("pattern"),
             py::arg("classification"));
 
-        py_Predictor.def("learn", [](Predictor &self, UInt recordNum, const SDR &pattern, UInt categoryIdx)
-            { self.learn( recordNum, pattern, {categoryIdx} ); },
+        py_Predictor.def("learn", static_cast<void (htm::Predictor::*)(UInt, const htm::SDR&, UInt)>(&Predictor::learn),
                 py::arg("recordNum"),
                 py::arg("pattern"),
                 py::arg("classification"));
 
-        // TODO: Pickle support
+       py_Predictor.def("saveToFile",
+         static_cast<void (htm::Predictor::*)(std::string, std::string) const>(&htm::Predictor::saveToFile), 
+         py::arg("file"), py::arg("fmt") = "BINARY",
+         R"(Serializes object to file. file: filename to write to.  fmt: format, one of 'BINARY', 'PORTABLE', 'JSON', or 'XML')");
+
+       py_Predictor.def("loadFromFile",    
+         static_cast<void (htm::Predictor::*)(std::string, std::string)>(&htm::Predictor::loadFromFile), 
+         py::arg("file"), py::arg("fmt") = "BINARY",
+         R"(Deserializes object from file. file: filename to read from.  fmt: format recorded by saveToFile(). )");
+
+        // Pickle support
 
         // pickle
-        // https://github.com/pybind/pybind11/issues/1061
         py_Predictor.def(py::pickle(
             [](const Predictor& self)
         {

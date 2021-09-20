@@ -20,6 +20,7 @@
 import datetime
 import numpy
 import unittest
+import os
 
 from htm.bindings.encoders import DateEncoder, DateEncoderParameters
 from htm.bindings.sdr import SDR, Metrics
@@ -273,6 +274,29 @@ class DateEncoder_Test(unittest.TestCase):
       d = d+datetime.timedelta(days=1)
       self.assertEqual( e.encode(d), e2.encode(d) )
 
+  def testJSONSerialization(self):
+      """
+      This test is to insure that Python can access the C++ serialization functions.
+      Serialization is tested more completely in C++ unit tests. Just checking 
+      that Python can access it.
+      """
+      p = DateEncoderParameters()
+      p.custom_width = 21
+      p.custom_days = ["sat,sun,fri"]
+      p.verbose = False
+      e1 = DateEncoder(p)
+
+      # serialize
+      filename = 'DateEncoder_serialize.json'
+      e1.saveToFile(filename, 'JSON')
+        
+      e2 = DateEncoder()
+      e2.loadFromFile(filename, 'JSON')
+        
+      d = datetime.datetime(1988, 5, 29, 20, 00)
+      #print(d)
+      self.assertEqual( e1.encode(d), e2.encode(d) )
+      os.remove(filename)
   
  
 if __name__ == "__main__":

@@ -41,12 +41,16 @@
 #include <cstring>
 
 // save diagnostic state
+#ifdef GCC
 #pragma GCC diagnostic push
 // turn off the specific warning. Can also use "-Wall"
 #pragma GCC diagnostic ignored "-Wsign-compare"
 #include <httplib.h>
 // turn back on the compiler warnings
 #pragma GCC diagnostic pop
+#else
+#include <httplib.h>
+#endif
 
 //#define CA_CERT_FILE "./ca-bundle.crt"
 #define DEFAULT_PORT 8050

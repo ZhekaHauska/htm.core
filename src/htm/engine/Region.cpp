@@ -54,7 +54,8 @@ Region::Region(const std::string &name, const std::string &nodeType, const std::
   // Impl has access to the region info in its constructor.
   RegionImplFactory &factory = RegionImplFactory::getInstance();
   spec_ = factory.getSpec(nodeType);
-  createInputsAndOutputs_();
+  createOutputs_();
+  createInputs_();
   impl_.reset(factory.createRegionImpl(nodeType, vm, this));
 }
 Region::Region(const std::string &name, const std::string &nodeType, ValueMap &vm, Network *network) {
@@ -68,7 +69,8 @@ Region::Region(const std::string &name, const std::string &nodeType, ValueMap &v
   // Impl has access to the region info in its constructor.
   RegionImplFactory &factory = RegionImplFactory::getInstance();
   spec_ = factory.getSpec(nodeType);
-  createInputsAndOutputs_();
+  createOutputs_();
+  createInputs_();
   impl_.reset(factory.createRegionImpl(nodeType, vm, this));
 
   //std::cerr << "Region created " << getName() << "=" << nodeType << "\n";
@@ -91,7 +93,7 @@ Region::Region() {
 
 Network *Region::getNetwork() { return network_; }
 
-void Region::createInputsAndOutputs_() {
+void Region::createOutputs_() {
   // This is called when a Region is added.
   // Create all the outputs for this region from the Spec.
   // By default outputs are zero size, no dimensions.
@@ -102,7 +104,8 @@ void Region::createInputsAndOutputs_() {
     std::shared_ptr<Output> output = std::make_shared<Output>(this, outputName, os.dataType);
     outputs_[outputName] = output;
   }
-
+}
+void Region::createInputs_() {
   // Create all the inputs for this node type.
   for (size_t i = 0; i < spec_->inputs.getCount(); ++i) {
     const std::pair<std::string, InputSpec> &p = spec_->inputs.getByIndex(i);
@@ -449,7 +452,12 @@ void Region::prepareInputs() {
     i->second->prepare();
   }
 }
-
+void Region::pushOutputsOverLinks() {
+  // Ask each output to distribute itself
+  for (auto i = outputs_.begin(); i != outputs_.end(); i++) {
+    i->second->push();
+  }
+}
 
 // setParameter
 void Region::setParameterByte(const std::string &name, Byte value) {
@@ -716,13 +724,20 @@ void Region::getOutputBuffers_(std::map<std::string, Array>& buffers) const {
 }
 
 void Region::restoreOutputBuffers_(const std::map<std::string, Array>& buffers) {
+  // This is called when a Region is being restored from archive.
+  // Recreate all the outputs for this region from the archived output buffer.
+  for (auto const &it : buffers) {
+    std::string outputName = it.first;
+    NTA_BasicType dataType = it.second.getType();
+    std::shared_ptr<Output> output = std::make_shared<Output>(this, outputName, dataType);
+    Array& outputBuffer = output->getData();
+    outputBuffer = it.second;
+    outputs_[outputName] = output;
+  }
+
   RegionImplFactory &factory = RegionImplFactory::getInstance();
   spec_ = factory.getSpec(type_);
-  createInputsAndOutputs_();
-  for (auto output: buffers) {
-    Array& outputBuffer = getOutput(output.first)->getData();
-    outputBuffer = output.second;
-  }
+  createInputs_(); // we use the spec for input name and type
 }
 
 

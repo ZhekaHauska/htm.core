@@ -118,116 +118,175 @@ void Network::configure(const std::string &yaml) {
         std::string type = cmd.second["type"].str();
         ValueMap params;
         if (cmd.second.contains("params")) params = cmd.second["params"];
-        addRegion(name, type, params);
-
-        UInt32 phase = 0;
+        // The phase can be specified as part of an addRegion
+        std::set<UInt32> phases;
         if (cmd.second.contains("phase")) {
-          phase = cmd.second["phase"].as<int>();
-          std::set<UInt32> phases;
-          phases.insert(phase);
-          setPhases(name, phases);
+          if (cmd.second["phase"].isSequence()) {
+            const std::vector<int> lst = cmd.second["phase"].asVector<int>();
+            for (int phase : lst) {
+              NTA_CHECK(phase >= 0) << "A phase ID must be a positive integer.";
+              phases.insert((UInt32)phase);
+            }
+          } else {
+            int phase = cmd.second["phase"].as<int>();
+            NTA_CHECK(phase >= 0) << "A phase ID must be a positive integer";
+            phases.insert((UInt32)phase);
+          }
         }
+        addRegion(name, type, params, phases);
+
       } else if (cmd.first == "addLink") {
+        // The an addLink section can specify src, dest, delay, dim, and mode
         std::string src = cmd.second["src"].str();
         std::string dest = cmd.second["dest"].str();
         std::string dim = "";
+        std::string mode = "";
+        std::string linkParam = "";
         std::vector<std::string> vsrc = Path::split(src, '.');
         std::vector<std::string> vdest = Path::split(dest, '.');
         int propagationDelay = 0;
         if (cmd.second.contains("delay"))
           propagationDelay = cmd.second["delay"].as<int>();
         if (cmd.second.contains("dim")) {
-          dim = cmd.second.to_json();
+          dim = cmd.second["dim"].to_json();
+        }
+        if (cmd.second.contains("mode")) {
+          mode = cmd.second["mode"].str();
+        }
+        if (!dim.empty() || !mode.empty()) {
+          linkParam = "{";
+          if (!dim.empty())
+            linkParam += "dim: " + dim;
+          if (!mode.empty()) {
+            if (linkParam.size() > 1)
+              linkParam += ", ";
+            linkParam += "mode : " + mode;
+          }
+          linkParam += "}";
         }
         NTA_CHECK(vsrc.size() == 2) << "Expecting source domain name '.' output name.";
         NTA_CHECK(vdest.size() == 2) << "Expecting destination domain name '.' input name.";
 
-        link(vsrc[0], vdest[0], "", dim, vsrc[1], vdest[1], propagationDelay);
+        link(vsrc[0], vdest[0], "", linkParam, vsrc[1], vdest[1], propagationDelay);
       }
     }
   }
 }
 
-
-std::shared_ptr<Region> Network::addRegion(const std::string &name, 
-                                           const std::string &nodeType,
-                                           const std::string &nodeParams) {
+// An overload of addRegion() that can specify phases
+std::shared_ptr<Region> Network::addRegion( const std::string &name, 
+                                            const std::string &nodeType,
+                                            const std::string &nodeParams,
+                                            const std::set<UInt32> &phases) {
   if (regions_.find(name) != regions_.end())
     NTA_THROW << "Region with name '" << name << "' already exists in network";
   std::shared_ptr<Region> r = std::make_shared<Region>(name, nodeType, nodeParams, this);
   regions_[name] = r;
   initialized_ = false;
 
-
-  setDefaultPhase_(r.get());
+  if (phases.empty()) {
+    std::set<UInt32> defaultPhase;
+    defaultPhase.insert(0); // if no phase is specified, use phase 0.
+    setPhases_(r, defaultPhase);
+  } else
+    setPhases_(r, phases);
   return r;
 }
 
+// An overload of addRegion() that defaults to phase 0
 std::shared_ptr<Region> Network::addRegion(const std::string &name, 
                                            const std::string &nodeType,
-                                           ValueMap& vm) {
+                                           const std::string &nodeParams) {
+
+  std::set<UInt32> defaultPhase;
+  defaultPhase.insert(0u);
+  std::shared_ptr<Region> r = addRegion(name, nodeType, nodeParams, defaultPhase);
+  return r;
+}
+
+// An overload of addRegion() that allows phases and has nodeParams already parsed.
+std::shared_ptr<Region> Network::addRegion(const std::string &name, 
+                                           const std::string &nodeType,
+                                           ValueMap& vm,
+                                           const std::set<UInt32> &phases) {
   if (regions_.find(name) != regions_.end())
     NTA_THROW << "Region with name '" << name << "' already exists in network";
   std::shared_ptr<Region> r = std::make_shared<Region>(name, nodeType, vm, this);
   regions_[name] = r;
   initialized_ = false;
 
-  setDefaultPhase_(r.get());
+  if (phases.empty()) {
+    std::set<UInt32> defaultPhase;
+    defaultPhase.insert(0);  // if no phase is specified, use phase 0.
+    setPhases_(r, defaultPhase);
+  } else
+    setPhases_(r, phases);
   return r;
 }
 
-
+// An overload of addRegon() that is used during a load to restore a region.
 std::shared_ptr<Region> Network::addRegion(std::shared_ptr<Region>& r) {
   NTA_CHECK(r != nullptr);
   r->network_ = this;
   regions_[r->getName()] = r;
   
-  // If a region is added, initially set the phase to the default phase.
-  // The phase can be changed later.
-  setDefaultPhase_(r.get());
+  // Note: phases are added in this case by calling phasesFromString()
 
   return r;
 }
 
 
-void Network::setDefaultPhase_(Region *region) {
-  UInt32 newphase = (UInt32)phaseInfo_.size();
-  std::set<UInt32> phases;
-  phases.insert(newphase);
-  setPhases_(region, phases);
-}
-
-void Network::setPhases_(Region *r, std::set<UInt32> &phases) {
+void Network::setPhases_(std::shared_ptr<Region> &r, const std::set<UInt32> &phases) {
+  // The phases are an ordered list of phase ID's. A phase is a list
+  // of regions that are executed together in the order that they are assigned to a phase
+  // (which is normally when the region is created).
+  //
+  // This function will assign a region to a phase or set of phases.  
+  // All regions not explicitly assigned to a phase are placed in phase 0.
+  // The phase ID is also the index of that phase in the phaseInfo structure.  
+  //
+  // Normally an application that is using phases will start with phase 1 and increment
+  // the phase ID by one for each additional phase they are using.
+  //
+  // Note: if a region is already in any phases, it will be removed from all phases
+  //       which are not in the new list. It will keep its position in the 
+  //       execution order for phases that already existed and are also in the new phase list.
+  //
   if (phases.empty())
     NTA_THROW << "Attempt to set empty phase list for region " << r->getName();
 
-  UInt32 maxNewPhase = *(phases.rbegin());
+  // Make room for more phases if needed.
+  UInt32 maxNewPhase = *(phases.rbegin());  // get the last phase ID (the largest index)
   UInt32 nextPhase = (UInt32)phaseInfo_.size();
   if (maxNewPhase >= nextPhase) {
-    // It is very unlikely that someone would add a region
-    // with a phase much greater than the phase of any other
-    // region. This sanity check catches such problems,
-    // though it should arguably be legal to set any phase.
-    if (maxNewPhase - nextPhase > 3)
-      NTA_THROW << "Attempt to set phase of " << maxNewPhase
-                << " when expected next phase is " << nextPhase
-                << " -- this is probably an error.";
-
-    phaseInfo_.resize(maxNewPhase + 1);
+    phaseInfo_.resize((size_t)maxNewPhase + 1); 
   }
   for (UInt i = 0; i < phaseInfo_.size(); i++) {
     bool insertPhase = false;
     if (phases.find(i) != phases.end())
-      insertPhase = true;
+      insertPhase = true;  // This phase is in the new list.
 
-    // remove previous settings for this region
-    std::set<Region *>::iterator item;
-    item = phaseInfo_[i].find(r);
-    if (item != phaseInfo_[i].end() && !insertPhase) {
-      phaseInfo_[i].erase(item);
-    } else if (insertPhase) {
-      // add the new phase(s_
-      phaseInfo_[i].insert(r);
+    // remove previous settings for this region if no longer in a phase
+    for (auto item = phaseInfo_[i].begin(); item != phaseInfo_[i].end(); item++) {
+      if ((*item)->getName() == r->getName()) {
+        // already in this phase.
+        if (insertPhase) {
+          // let the region keeps its current location in the execution sequence for this phase.
+          insertPhase = false;
+          break;
+        } else {
+          // no longer needed in this phase, remove.
+          phaseInfo_[i].erase(item);
+          break;
+        }
+      }
+    }
+    if (insertPhase) {
+        // add the region to this phase.
+      if (r->getName() == "INPUT")
+        phaseInfo_[i].insert(phaseInfo_[i].begin(), r);  // INPUT region must be first in the phase
+      else
+        phaseInfo_[i].push_back(r);
     }
   }
 
@@ -241,27 +300,33 @@ void Network::resetEnabledPhases_() {
   maxEnabledPhase_ = getMaxPhase();
 }
 
-void Network::setPhases(const std::string &name, std::set<UInt32> &phases) {
+void Network::setPhases(const std::string &name, const std::set<UInt32> &phases) {
   auto itr = regions_.find(name);
   if (itr == regions_.end())
     NTA_THROW << "setPhases -- no region exists with name '" << name << "'";
+  std::shared_ptr<Region> &r = itr->second;
 
-  std::shared_ptr<Region>& r = itr->second;
-  setPhases_(r.get(), phases);
+  if (phases.empty()) {
+    std::set<UInt32> ph;
+    ph.insert(0); 
+    setPhases_(r, ph);
+  } else
+    setPhases_(r, phases);
 }
 
 std::set<UInt32> Network::getPhases(const std::string &name) const {
   auto itr = regions_.find(name);
   if (itr == regions_.end())
-    NTA_THROW << "setPhases -- no region exists with name '" << name << "'";
+    NTA_THROW << "getPhases -- no region exists with name '" << name << "'";
 
   const std::shared_ptr<Region> r = itr->second;
 
   std::set<UInt32> phases;
   // construct the set of phases enabled for this region
   for (UInt32 i = 0; i < phaseInfo_.size(); i++) {
-    if (phaseInfo_[i].find(r.get()) != phaseInfo_[i].end()) {
-      phases.insert(i);
+    for (auto r : phaseInfo_[i]) {
+      if (r->getName() == name)
+        phases.insert(i);
     }
   }
   return phases;
@@ -286,12 +351,14 @@ void Network::removeRegion(const std::string &name) {
   r->uninitialize();
   r->clearInputs();
 
-
-  auto phase = phaseInfo_.begin();
-  for (; phase != phaseInfo_.end(); phase++) {
-    auto toremove = phase->find(r.get());
-    if (toremove != phase->end())
-      phase->erase(toremove);
+  // take it out of all phases
+  for (UInt i = 0; i < phaseInfo_.size(); i++) {
+    for (auto it = phaseInfo_[i].begin(); it != phaseInfo_[i].end(); ++it) {
+      if (name == (*it)->getName()) {
+        phaseInfo_[i].erase(it);
+        break; // should never be more than one with that name.
+      }
+    }
   }
 
   // Trim phaseinfo as we may have no more regions at the highest phase(s)
@@ -322,7 +389,9 @@ std::shared_ptr<Link> Network::link(const std::string &srcRegionName,
       NTA_THROW << "Network::link -- source region '" << srcRegionName << "' does not exist";
     // Our special InputRegion does not exist. But we are using it so we need to create it.
     ValueMap vm;  // Empty parameters.
-    Network::addRegion(srcRegionName, "RawInput", vm);  // Note: will have no Outputs defined.
+    std::set<UInt32> phases; 
+    phases.insert(0u);  // (This special region goes into phase 0)
+    Network::addRegion(srcRegionName, "RawInput", vm, phases);  // Note: will have no Outputs defined.
   }
   std::shared_ptr<Region> srcRegion = regions_[srcRegionName];
 
@@ -352,6 +421,20 @@ std::shared_ptr<Link> Network::link(const std::string &srcRegionName,
     outputName = srcSpec->getDefaultOutputName();
   }
 
+  Dimensions dim;
+  std::string params = Path::trim(linkParams);
+  if (!params.empty()) {
+    Value v;
+    v.parse(linkParams);
+    if (v.isMap() && v.contains("dim")) {
+      Value v1 = v["dim"];
+      if (v1.isSequence())
+        dim = Dimensions(v1.asVector<UInt>());
+      else if (v1.isScalar())
+        dim = Dimensions(v1.as<UInt>());
+    }
+  }
+
   std::shared_ptr<Output> srcOutput = srcRegion->getOutput(outputName);
   if (srcOutput == nullptr) {
     if (srcRegionName == "INPUT") {
@@ -360,19 +443,6 @@ std::shared_ptr<Link> Network::link(const std::string &srcRegionName,
       NTA_BasicType type = destInput->getDataType();
       srcOutput = std::make_shared<Output>(srcRegion.get(), outputName, type);
 
-      Dimensions dim;
-      std::string params = Path::trim(linkParams);
-      if (!params.empty()) {
-        Value v;
-        v.parse(linkParams);
-        if (v.isMap() && v.contains("dim")) {
-          Value v1 = v["dim"];
-          if (v1.isSequence())
-            dim = Dimensions(v1.asVector<UInt>());
-          else if (v1.isScalar())
-            dim = Dimensions(v1.as<UInt>());
-        }
-      }
       if (dim.empty())
         NTA_THROW << "Link declared with Special \"INPUT\" source requires dimensions in link parameters. Something like "
                      "{dim: 100} or {dim: [10,20]}";
@@ -437,12 +507,62 @@ void Network::removeLink(const std::string &srcRegionName,
   destInput->removeLink(link);
 }
 
+void Network::initialize() {
+
+  /*
+   * Do not reinitialize if already initialized.
+   * Mostly, this is harmless, but it has a side
+   * effect of resetting the max/min enabled phases,
+   * which causes havoc if we are in the middle of
+   * a computation.
+   */
+  if (initialized_)
+    return;
+
+  /*
+   * 1. Calculate all Input/Output dimensions by evaluating links.
+   */
+  // evaluate regions and initialize their links in region execution order
+  //NTA_DEBUG << "Initialize Links: " << std::endl;
+  for (UInt32 phaseID = 0; phaseID < phaseInfo_.size(); phaseID++) {
+    for (auto r : phaseInfo_[phaseID]) {
+      //NTA_DEBUG << "  phase " << phaseID << " region: " << r->getName() << std::endl;
+      r->evaluateLinks();
+    }
+  }
+
+  /*
+   * 2. initialize region/impl
+   */
+  for (auto p : regions_) {
+    std::shared_ptr<Region> r = p.second;
+    r->initialize();
+  }
+
+  /*
+   * 3. Enable all phases in the network
+   */
+  resetEnabledPhases_();
+
+  /*
+   * Mark network as initialized.
+   */
+  initialized_ = true;
+}
+
+
 
 
 /**
  * Set the source data for a Link identified with the source as "INPUT" and <sourceName>.
+ * NOTE: we need to do the INPUT link because the archive stores only outputs.  So the initial
+ *       input needs an output to be stored on.  Otherwise, data written directly to input buffers 
+ *       would be lost during a load() from archive.
  */
 void Network::setInputData(const std::string& sourceName, const Array& data) {
+  if (!initialized_) {
+    initialize();
+  }
   // The placeholder region "INPUT" with an output of <sourceName> should already exist if the link was defined.
   std::shared_ptr<Region> region = getRegion("INPUT"); 
   Array &a = region->getOutput(sourceName)->getData(); // we actually populate an output buffer that will be moved to input.
@@ -456,6 +576,9 @@ void Network::setInputData(const std::string& sourceName, const Array& data) {
 }
 
 void Network::setInputData(const std::string &sourceName, const Value& vm) {
+  if (!initialized_) {
+    initialize();
+  }
   // The placeholder region "INPUT" with an output of <sourceName> should already exist if the link was defined.
   std::shared_ptr<Region> region = getRegion("INPUT");
   Array &a =  region->getOutput(sourceName)->getData(); // populate this output buffer that will be moved to the input.
@@ -479,7 +602,7 @@ void Network::setInputData(const std::string &sourceName, const Value& vm) {
 }
 
 
-void Network::run(int n) {
+void Network::run(int n, std::vector<UInt32> phases) {
   if (!initialized_) {
     initialize();
   }
@@ -490,14 +613,31 @@ void Network::run(int n) {
   NTA_CHECK(maxEnabledPhase_ < phaseInfo_.size())
       << "maxphase: " << maxEnabledPhase_ << " size: " << phaseInfo_.size();
 
+
   for (int iter = 0; iter < n; iter++) {
     iteration_++;
 
-    // compute on all enabled regions in phase order
-    for (UInt32 phase = minEnabledPhase_; phase <= maxEnabledPhase_; phase++) {
-      for (auto r : phaseInfo_[phase]) {
-        r->prepareInputs();
-        r->compute();
+    // In phase order and order of region definition within a phase, execute each region.
+    // After executing a region, move the output buffer to the input buffer for each link.
+    if (!phases.empty()) {
+      // execute the specified phases only.
+      for (UInt32 phase : phases) {
+        NTA_CHECK(phase < phaseInfo_.size()) << "Phase ID " << phase << " specified in run() is out of range.";
+        for (auto r : phaseInfo_[phase]) {
+          //r->prepareInputs();       // For each link pull sources for each input
+          r->compute();
+          r->pushOutputsOverLinks();  // copy outputs to inputs for each link.
+        }
+      }
+    } else {
+      // compute all enabled regions in phase order, within a phase
+      // execute regions in the order they were placed into the phase.
+      for (UInt32 current_phase = minEnabledPhase_; current_phase <= maxEnabledPhase_; current_phase++) {
+        for (auto r : phaseInfo_[current_phase]) {
+          //r->prepareInputs();       // For each link pull sources for each input
+          r->compute();
+          r->pushOutputsOverLinks();  // copy outputs to inputs for each link.
+        }
       }
     }
 
@@ -507,63 +647,27 @@ void Network::run(int n) {
       callback.second.first(this, iteration_, callback.second.second);
     }
 
-    // Refresh all links in the network at the end of every timestamp so that
-    // data in delayed links appears to change atomically between iterations
-    for (auto p: regions_) {
-      const std::shared_ptr<Region> r = p.second;
-
-      for (const auto &inputTuple : r->getInputs()) {
-        for (const auto &pLink : inputTuple.second->getLinks()) {
-          pLink->shiftBufferedData();
-        }
-      }
-    }
+    /**** we are now doing the delay buffer shift when output is being distributed.
+     *
+     *    // Refresh all links in the network at the end of every timestamp so that
+     *    // data in delayed links appears to change atomically between iterations
+     *    for (auto p: regions_) {
+     *      const std::shared_ptr<Region> r = p.second;
+     *
+     *      for (const auto &inputTuple : r->getInputs()) {
+     *        for (const auto &pLink : inputTuple.second->getLinks()) {
+     *          pLink->shiftBufferedData();
+     *        }
+     *      }
+     *    }
+     ******/
 
   } // End of outer run-loop
 
   return;
 }
 
-void Network::initialize() {
 
-  /*
-   * Do not reinitialize if already initialized.
-   * Mostly, this is harmless, but it has a side
-   * effect of resetting the max/min enabled phases,
-   * which causes havoc if we are in the middle of
-   * a computation.
-   */
-  if (initialized_)
-    return;
-
-  /*
-   * 1. Calculate all Input/Output dimensions by evaluating links.
-   */
-  for (auto phase : phaseInfo_) { // evaluate regions in execution order
-    for (auto r : phase) {
-      r->evaluateLinks();
-    }
-  }
-
-
-  /*
-   * 2. initialize region/impl
-   */
-  for (auto p: regions_) {
-    std::shared_ptr<Region> r = p.second;
-    r->initialize();
-  }
-
-  /*
-   * 3. Enable all phases in the network
-   */
-  resetEnabledPhases_();
-
-  /*
-   * Mark network as initialized.
-   */
-  initialized_ = true;
-}
 
 const Collection<std::shared_ptr<Region>> Network::getRegions() const { 
   Collection<std::shared_ptr<Region>> regions;
@@ -686,19 +790,16 @@ void Network::post_load() {
     // If a propogation Delay is specified, the Link serialization
 	  // saves the current input buffer at the top of the
 	  // propogation Delay array because it will be pushed to
-	  // the input during prepareInputs();
+	  // the input during run();
 	  // It then saves all but the back buffer
     // (the most recent) of the Propogation Delay array because
     // that buffer is the same as the most current output.
 	  // So after restore we need to call prepareInputs() and
 	  // shift the current outputs into the Propogaton Delay array.
-    r->prepareInputs();
 
-    for (const auto &inputTuple : r->getInputs()) {
-      for (const auto &pLink : inputTuple.second->getLinks()) {
-        pLink->shiftBufferedData();
-      }
-    }
+    r->prepareInputs();  // for each link, pull sources for each input.
+                         // it will also shift the Propogaton Delay data.
+
   }
 
   // If we made it this far without an exception, we are good to go.
@@ -706,12 +807,38 @@ void Network::post_load() {
 
 }
 
+/**
+ * A simple function to display the execution map. Show what regions are in which phase
+ * how the dimensions were propogated.  Intended for debugging an application.
+ */
+std::string Network::getExecutionMap() {
+  std::stringstream ss;
+  ss << "   Execution Map \n";
+
+  for (UInt32 phaseID = 0; phaseID < phaseInfo_.size(); phaseID++) {
+    if (!phaseInfo_[phaseID].empty()) {
+      ss << "  Phase" << phaseID << ((phaseID < minEnabledPhase_ || phaseID > maxEnabledPhase_) ? " (disabled)" : "") << std::endl;
+      for (auto r : phaseInfo_[phaseID]) {
+        ss << "    region: " << r->getName() << std::endl;
+        auto outputs = r->getOutputs();
+        for (auto it = outputs.begin(); it != outputs.end(); it++) {
+          const std::set<std::shared_ptr<Link>> &links = it->second->getLinks();
+          for (auto link : links) {
+            ss << "      " << link->toString() << std::endl;
+          }
+        }
+      }
+    }
+  }
+  return ss.str();
+}
+
 std::string Network::phasesToString() const {
   std::stringstream ss;
   ss << "{";
   ss << "minEnabledPhase_: " << minEnabledPhase_ << ", ";
   ss << "maxEnabledPhase_: " << maxEnabledPhase_ << ", ";
-  ss << "info: [";
+  ss << "phases: [";
   for (auto phase : phaseInfo_) {
     ss << "[";
     for (auto region : phase) {
@@ -727,7 +854,7 @@ void Network::phasesFromString(const std::string& phaseString) {
   content.erase(std::remove(content.begin(), content.end(), ','), content.end());
   std::stringstream ss(content);
   std::string tag;
-  std::set<Region *> phase;
+  std::vector<std::shared_ptr<Region>> phase;
   
   NTA_CHECK(ss.peek() == '{') << "Invalid phase deserialization";
   ss.ignore(1);
@@ -738,7 +865,7 @@ void Network::phasesFromString(const std::string& phaseString) {
   NTA_CHECK(tag == "maxEnabledPhase_:");
   ss >> maxEnabledPhase_;
   ss >> tag;
-  NTA_CHECK(tag == "info:") << "Invalid phase deserialization";
+  NTA_CHECK(tag == "phases:") << "Invalid phase deserialization";
   ss >> std::ws;
   NTA_CHECK(ss.peek() == '[') << "Invalid phase deserialization";
   ss.ignore(1);
@@ -752,7 +879,7 @@ void Network::phasesFromString(const std::string& phaseString) {
         ss >> tag;
         auto it = regions_.find(tag);
         NTA_CHECK(it != regions_.end()) << "Region '" << tag << "' not found while decoding phase.";
-        phase.insert(it->second.get());
+        phase.push_back(it->second);
         ss >> std::ws;
       }
       ss.ignore(1); // ']'
@@ -824,6 +951,17 @@ bool Network::operator==(const Network &o) const {
     std::shared_ptr<Region> r2 = itr->second;
     if (*(r1.get()) != *(r2.get())) {
       return false;
+    }
+  }
+
+  if (phaseInfo_.size() != o.phaseInfo_.size())
+    return false;
+  for (size_t phase = 0; phase < phaseInfo_.size(); phase++) {
+    if (phaseInfo_[phase].size() != o.phaseInfo_[phase].size())
+      return false;
+    for (size_t i = 0; i < phaseInfo_[phase].size(); i++) {
+      if (phaseInfo_[phase][i]->getName() != o.phaseInfo_[phase][i]->getName())
+        return false;
     }
   }
   return true;

@@ -19,6 +19,8 @@
 #include <pybind11/pybind11.h>
 #include <pybind11/numpy.h>
 #include <pybind11/stl.h>
+#include <pybind11/iostream.h>
+#include <sstream>
 namespace py = pybind11;
 
 #include <htm/encoders/ScalarEncoder.hpp>
@@ -104,6 +106,7 @@ this contiguous block varies continuously with the input value.
 To inspect this run:
 $ python -m htm.examples.encoders.scalar_encoder --help)");
 
+    py_ScalarEnc.def(py::init<>(), R"( For use with loadFromFile. )");
     py_ScalarEnc.def(py::init<ScalarEncoderParameters&>(), R"()");
     py_ScalarEnc.def_property_readonly("parameters",
         [](const ScalarEncoder &self) { return self.parameters; },
@@ -122,5 +125,67 @@ fields are filled in automatically.)");
         self.encode( value, *output );
         return output; },
 R"()");
+
+// Serialization
+// loadFromString
+    py_ScalarEnc.def("loadFromString", [](ScalarEncoder& self, const py::bytes& inString) {
+      std::stringstream inStream(inString.cast<std::string>());
+      self.load(inStream, JSON);
+    });
+
+    // writeToString
+    py_ScalarEnc.def("writeToString", [](const ScalarEncoder& self) {
+      std::ostringstream os;
+      os.flags(std::ios_base::scientific);
+      os.precision(std::numeric_limits<double>::digits10 + 1);
+      self.save(os, JSON); // see serialization in bindings for SP, py_SpatialPooler.cpp for explanation
+      return py::bytes( os.str() );
+   });
+
+  // pickle
+  py_ScalarEnc.def(py::pickle( 
+  [](const ScalarEncoder& enc) // __getstate__
+  {
+    std::stringstream ss;
+    enc.save(ss);
+
+  /* The values in stringstream are binary so pickle will get confused
+   * trying to treat it as utf8 if you just return ss.str().
+   * So we must treat it as py::bytes.  Some characters could be null values.
+   */
+    return py::bytes( ss.str() );
+  },
+
+  [](py::bytes &s)   // __setstate__
+  {
+  /* pybind11 will pass in the bytes array without conversion.
+   * so we should be able to just create a string to initalize the stringstream.
+   */
+    std::stringstream ss( s.cast<std::string>() );
+    std::unique_ptr<ScalarEncoder> enc(new ScalarEncoder());
+    enc->load(ss);
+
+  /*
+   * The __setstate__ part of the py::pickle() is actually a py::init() with some options.
+   * So the return value can be the object returned by value, by pointer,
+   * or by container (meaning a unique_ptr). SP has a problem with the copy constructor
+   * and pointers have problems knowing who the owner is so lets use unique_ptr.
+   * See: https://pybind11.readthedocs.io/en/stable/advanced/classes.html#custom-constructors
+   */
+    return enc;
+  }));
+
+// loadFromFile
+//    
+   py_ScalarEnc.def("saveToFile",
+                     static_cast<void (htm::ScalarEncoder::*)(std::string, std::string) const>(&htm::ScalarEncoder::saveToFile), 
+                     py::arg("file"), py::arg("fmt") = "BINARY",
+R"(Serializes object to file. file: filename to write to.  fmt: format, one of 'BINARY', 'PORTABLE', 'JSON', or 'XML')");
+
+   py_ScalarEnc.def("loadFromFile",    static_cast<void (htm::ScalarEncoder::*)(std::string, std::string)>(&htm::ScalarEncoder::loadFromFile), 
+                     py::arg("file"), py::arg("fmt") = "BINARY",
+R"(Deserializes object from file. file: filename to read from.  fmt: format recorded by saveToFile(). )");
+
+
   }
 }

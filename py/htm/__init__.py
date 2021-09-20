@@ -14,6 +14,12 @@
 # You should have received a copy of the GNU Affero Public License
 # along with this program.  If not, see http://www.gnu.org/licenses.
 # ----------------------------------------------------------------------
+"""
+HTM Community Edition of NuPIC
+
+Most classes in this package support pickling, meaning that they can be
+serialize and deserialized with the standard library's pickle module.
+"""
 
 __import__('pkg_resources').declare_namespace(__name__)
 

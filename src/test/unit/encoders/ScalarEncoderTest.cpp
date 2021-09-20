@@ -96,6 +96,20 @@ TEST(ScalarEncoder, ValidScalarInputs) {
   EXPECT_ANY_THROW(e.encode(20.0001f, output));
 }
 
+TEST(ScalarEncoder, CategoryEncode) {
+  ScalarEncoderParameters p;
+  p.size = 66;
+  p.sparsity = 0.02f;
+  p.minimum = 0;
+  p.maximum = 65;
+  SDR output({66});
+  ScalarEncoder e(p);
+
+  EXPECT_ANY_THROW(e.encode(-0.01f, output)); // less than minimum
+  EXPECT_ANY_THROW(e.encode(66.0f, output));  // greater than maximum 
+  e.encode(10.0f, output);                    // within range
+}
+
 TEST(ScalarEncoder, NonIntegerBucketWidth) {
   ScalarEncoderParameters p;
   p.size       = 7;
@@ -174,14 +188,18 @@ TEST(ScalarEncoder, Serialization) {
   p.activeBits = 34;
   p.radius     = .1337;
   inputs.push_back( new ScalarEncoder( p ) );
+
   p.clipInput = true;
   inputs.push_back( new ScalarEncoder( p ) );
+
   p.clipInput = false;
   p.periodic  = true;
   inputs.push_back( new ScalarEncoder( p ) );
+
   p.radius     = 0.0f;
   p.resolution = .1337;
   inputs.push_back( new ScalarEncoder( p ) );
+
   ScalarEncoderParameters q;
   q.minimum  = -1.0f;
   q.maximum  =  1.0003f;
@@ -189,11 +207,18 @@ TEST(ScalarEncoder, Serialization) {
   q.sparsity = 0.15f;
   inputs.push_back( new ScalarEncoder( q ) );
 
-  for( const auto enc1 : inputs ) {
+  ScalarEncoderParameters r;
+  r.minimum = 0;
+  r.maximum = 65;
+  r.size = 700;
+  r.sparsity = 0.02f;
+  inputs.push_back(new ScalarEncoder(r));
+
+  for (const auto enc1 : inputs) {
     std::stringstream buf;
     enc1->save( buf, JSON );
   
-    //std::cerr << "SERIALIZED:" << std::endl << buf.str() << std::endl;
+    std::cerr << "SERIALIZED:" << std::endl << buf.str() << std::endl;
     buf.seekg(0);
 
     ScalarEncoder enc2;
@@ -202,6 +227,7 @@ TEST(ScalarEncoder, Serialization) {
     const auto &p1 = enc1->parameters;
     const auto &p2 = enc2.parameters;
     EXPECT_EQ(  p1.size,       p2.size);
+    EXPECT_EQ(  p1.category,   p2.category);
     EXPECT_EQ(  p1.activeBits, p2.activeBits);
     EXPECT_EQ(  p1.periodic,   p2.periodic);
     EXPECT_EQ(  p1.clipInput,  p2.clipInput);

@@ -167,7 +167,7 @@ TEST(ValueTest, asMap) {
     ss << itr->first << "=" << itr->second;
   }
   result = ss.str();
-  std::cout << result << "\n";
+  //std::cout << result << "\n";
   EXPECT_STREQ(result.c_str(), "scalar=456, string=is a scalar.");
 }
 

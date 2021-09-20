@@ -91,7 +91,7 @@ public:
    *             name: <region name>
    *             type: <region type>
    *             params: <list of parameters>  (optional)
-   *             phase:  <optonal phase number> (optional)
+   *             phase:  <phase ID or a list of phases to put this region into> (optional)
    *
    *         - addLink:
    *             src: <Name of the source region "." Output name>
@@ -149,22 +149,23 @@ public:
    * @{
    */
   /**
-   *    saveToFile(path)          Open a file and stream to it. (Binary)
+   *    saveToFile(path [, fmt])  Open a file and stream to it. 
    *    save(ostream f [, fmt])   Stream to your stream.  
    *    f << net;                 Output human readable text. 
    *
-   *    loadFromFile(path)
+   *    loadFromFile(path [, fmt])
    *    load(istream f [, fmt])
    *
    * @path The filename into which to save/load the streamed serialization.
    * @f    The stream with which to save/load the serialization.
    * @fmt  Format: One of following from enum SerializableFormat
-   *   BINARY   - A binary format which is the fastest but not portable between platforms (default).
-   *   PORTABLE - Another Binary format, not quite as fast but is portable between platforms.
-   *   JSON     - Human readable JSON text format. Slow.
-   *   XML      - Human readable XML text format. Even slower.
+   *   SerializableFormat::BINARY   - A binary format which is the fastest but not portable between platforms (default).
+   *   SerializableFormat::PORTABLE - Another Binary format, not quite as fast but is portable between platforms.
+   *   SerializableFormat::JSON     - Human readable JSON text format. Slow.
+   *   SerializableFormat::XML      - Human readable XML text format. Even slower.
+   * or an std::string, one of "BINARY", "PORTABLE", "JSON", "XML".
    *
-	 * See Serializable base class for more details.
+	 * See Serializable base class for more details (types/Serializable.hpp).
 	 */
   CerealAdapter;  // see Serializable.hpp
   // FOR Cereal Serialization
@@ -210,24 +211,43 @@ public:
    *        Name of the region, Must be unique in the network
    * @param nodeType
    *        Type of node in the region, e.g. "FDRNode"
-   * @param nodeParams
+   * @param nodeParams (optional)
    *        A JSON-encoded string specifying writable params
+   * @param phase  (optional)
+   *        A set of ID's of execution phases to add the region into.
+   *        This is useful to group regions that execute together.
+   *        If not given, regions are grouped into phase 0.
+   *        A region can be a member of any number of phases but only once per phase.
    *
    * @returns A pointer to the newly created Region
+   *
+   * The optional arguments are implemented as overloads to make it easier
+   * to write the Python bindings.
    */
+  // An overload to use with phases
+  std::shared_ptr<Region> addRegion(const std::string &name,
+  					                        const std::string &nodeType,
+                                    const std::string &nodeParams,
+                                    const std::set<UInt32> &phases);
+  // An overload to use with a single phase as an integer (avoid warning of scaler initializer)
+  std::shared_ptr<Region> addRegion(const std::string &name, 
+                                    const std::string &nodeType, 
+                                    const std::string &nodeParams,
+                                    UInt32 phase) {
+    std::set<UInt32> phases;
+    phases.insert(phase);
+    return addRegion(name, nodeType, nodeParams, phases);
+  }
+  // An overload to use without phases (region placed in phase 0)
   std::shared_ptr<Region> addRegion(const std::string &name,
   					                        const std::string &nodeType,
                                     const std::string &nodeParams);
+  // An overload to use with phases and nodeParams has already been parsed.
   std::shared_ptr<Region> addRegion(const std::string &name, 
                                     const std::string &nodeType,
-                                    ValueMap& vm);
-  /**
-    * Add a region in a network from deserialized region
-    *
-    * @param Region shared_ptr
-    *
-    * @returns A pointer to the newly created Region
-    */
+                                    ValueMap& vm,
+                                    const std::set<UInt32> &phases);
+  // An overload to use when restoring an archive with load().
   std::shared_ptr<Region> addRegion(std::shared_ptr<Region>& region);
 
 
@@ -318,9 +338,10 @@ public:
    * @param name
    *        Name of the region
    * @param phases
-   *        A tuple of phases (must be positive integers)
+   *        A set of phase ID's to insert the region into (must be positive integers)
+   *        If the phase does not exist, it is created.
    */
-  void setPhases(const std::string &name, std::set<UInt32> &phases);
+  void setPhases(const std::string &name, const std::set<UInt32> &phases);
 
   /**
    * Get phases for a region.
@@ -334,13 +355,15 @@ public:
 
   /**
    * Get minimum phase for regions in this network. If no regions, then min = 0.
+   * This returns the phaseID for the first non-empty phase.
    *
    * @returns Minimum phase
    */
   UInt32 getMinPhase() const;
 
   /**
-   * Get maximum phase for regions in this network. If no regions, then max = 0.
+   * Get maximum phase for regions in this network. If no regions, then returns = 0.
+   * The next phase to be created should be getMaxPhase() + 1.
    *
    * @returns Maximum phase
    */
@@ -348,6 +371,9 @@ public:
 
   /**
    * Set the minimum enabled phase for this network.
+   * This is normally 1 if there are phases.
+   * If a region is created without specifiying a phase it is put in phase 0.
+   * Use this function to reduce the range of phases to be executed.
    *
    * @param minPhase Minimum enabled phase
    */
@@ -355,6 +381,7 @@ public:
 
   /**
    * Set the maximum enabled phase for this network.
+   * Use this function to reduce the range of phases to be executed.
    *
    * @param minPhase Maximum enabled phase
    */
@@ -386,11 +413,32 @@ public:
    * Run the network for the given number of iterations of compute for each
    * Region in the correct order.
    *
-   * For each iteration, Region.compute() is called.
+   * For each iteration, the specified phases are executed in the order specified
+   * and within each phase the Region.compute() is called for each region in the phase
+   * in the order that the regions were placed in the phases.
+   * If a region was not assigned to a phase it will be in phase ID = 0.
+   * 
+   * At the end of each iteration, the callback function is called and the delays are advanced.
+   * 
+   * Just after execution of a region, its outputs are distributed to inputs via attached links.
    *
    * @param n Number of iterations
+   * @param phase The phase ID or a vector of phase ID's of the phases to execute.  
+   *              If not specified, execute all phases.
    */
-  void run(int n);
+  // execute all phases in phase ID order. Repeat n times.
+  void run(int n) {     
+    std::vector<UInt32> phases; // an empty phase list
+    run(n, phases);
+  };
+  // execute a specific phase only. Repeat n times
+  void run(int n, UInt32 phase) {  
+    std::vector<UInt32> phases;
+    phases.push_back(phase);
+    run(n, phases);
+  }
+  // execute specific phases in this order. Repeat n times.
+  void run(int n, std::vector<UInt32> phases);  
 
   /**
    * The type of run callback function.
@@ -496,6 +544,13 @@ public:
 
   friend std::ostream &operator<<(std::ostream &, const Network &);
 
+  // Returns a text version of the phase structure.
+  std::string phasesToString() const;
+
+  // Returns a text version of order of execution
+  std::string getExecutionMap();
+
+
 private:
   // Both constructors use this common initialization method
   void commonInit();
@@ -506,16 +561,12 @@ private:
   void post_load(std::vector<std::shared_ptr<Link>>& links);
 
   // internal method using region pointer instead of name
-  void setPhases_(Region *r, std::set<UInt32> &phases);
-
-  // default phase assignment for a new region
-  void setDefaultPhase_(Region *region);
+  void setPhases_(std::shared_ptr<Region> &r, const std::set<UInt32> &phases);
 
   // whenever we modify a network or change phase
   // information, we set enabled phases to min/max for
   // the network
   void resetEnabledPhases_();
-  std::string phasesToString() const;
   void phasesFromString(const std::string& phaseString);
 
   bool initialized_;
@@ -533,7 +584,7 @@ private:
 
   // This is main data structure used to choreograph
   // network computation
-  std::vector<std::set<Region *> > phaseInfo_;
+  std::vector<std::vector<std::shared_ptr<Region>> > phaseInfo_;
 
   // we invoke these callbacks at every iteration
   Collection<callbackItem> callbacks_;

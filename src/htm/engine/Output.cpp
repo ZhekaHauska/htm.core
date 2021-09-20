@@ -136,6 +136,12 @@ size_t Output::getNodeOutputElementCount() const {
 
 bool Output::hasOutgoingLinks() { return (!links_.empty()); }
 
+void Output::push() {
+  for (auto &link : links_) {
+    link->compute();
+  }
+}
+
 NTA_BasicType Output::getDataType() const { return data_.getType(); }
 
 void Output::resize(size_t count) {

@@ -304,3 +304,30 @@ class RDSE_Test(unittest.TestCase):
         SDR_loaded = rdse_loaded.encode(value_to_encode)
 
         assert(SDR_original == SDR_loaded)
+        
+    def testJSONSerialization(self):
+        """
+        This test is to insure that Python can access the C++ serialization functions.
+        Serialization is tested more completely in C++ unit tests. Just checking 
+        that Python can access it.
+        """
+        rdse_params = RDSE_Parameters()
+        rdse_params.sparsity = 0.1
+        rdse_params.size = 1000
+        rdse_params.resolution = 0.1
+        rdse_params.seed = 1997
+
+        rdse = RDSE(rdse_params)
+        filename = 'RDSE_testPickle'
+        rdse.saveToFile(filename, 'JSON')
+        
+        rdse_loaded =  RDSE()
+        rdse_loaded.loadFromFile(filename, 'JSON')
+        
+        value_to_encode = 69003        
+        SDR_original = rdse.encode(value_to_encode)
+        SDR_loaded = rdse_loaded.encode(value_to_encode)
+
+        assert(SDR_original == SDR_loaded)
+        
+        

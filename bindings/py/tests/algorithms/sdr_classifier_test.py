@@ -25,6 +25,7 @@ import random
 import sys
 import tempfile
 import unittest
+import os
 
 from htm.bindings.sdr import SDR
 from htm.bindings.algorithms import Classifier, Predictor
@@ -560,35 +561,113 @@ class ClassifierTest(unittest.TestCase):
     self.assertAlmostEqual(result2[0][1], 1.0, places=1)
 
 
-  @unittest.skip("TODO: Pickle unimpemented!")
-  def testSerialization(self):
-    c = Predictor([1], 1.0)
-    c.compute(recordNum=0,
-              patternNZ=[1, 5, 9],
-              classification=4)
-    c.compute(recordNum=1,
-              patternNZ=[0, 6, 9, 11],
-              classification=5)
-    c.compute(recordNum=2,
-              patternNZ=[6, 9],
-              classification=5)
-    c.compute(recordNum=3,
-              patternNZ=[1, 5, 9],
-              classification=4)
-    serialized = pickle.dumps(c)
-    c = pickle.loads(serialized)
+  def testSerialization1(self):
+    # This test verifies that pickle works for pickle of a Classifier
+    SDR1 = SDR(15);  SDR1.sparse = [1, 5, 9]
+    SDR2 = SDR(15);  SDR2.sparse = [0, 6, 9, 11]
+    SDR3 = SDR(15);  SDR3.sparse = [6, 9]
+    SDR4 = SDR(15);  SDR4.sparse = [1, 5, 9]
+    c1 = Classifier()
+    c1.learn(pattern=SDR1, classification=4)
+    c1.learn(pattern=SDR2, classification=5)
+    c1.learn(pattern=SDR3, classification=5)
+    c1.learn(pattern=SDR4, classification=4)
+    c1.learn(pattern=SDR4, classification=4)
+    
+    serialized = pickle.dumps(c1)
+    c2 = pickle.loads(serialized)
 
-    result = c.compute(recordNum=4,
-              patternNZ=[1, 5, 9],
-              classification=4)
-    self.assertEqual(len(result[1]), 6)
-    self.assertAlmostEqual(result[1][0], 0.034234, places=5)
-    self.assertAlmostEqual(result[1][1], 0.034234, places=5)
-    self.assertAlmostEqual(result[1][2], 0.034234, places=5)
-    self.assertAlmostEqual(result[1][3], 0.034234, places=5)
-    self.assertAlmostEqual(result[1][4], 0.093058, places=5)
-    self.assertAlmostEqual(result[1][5], 0.770004, places=5)
+    result1 = c1.infer(SDR1)
+    result2 = c2.infer(SDR1)
+    #print("  testSerialization1 result: %.6f, %.6f, %.6f, %.6f, %.6f, %.6f "%( result1[0], result1[1], result1[2], result1[3], result1[4], result1[5]));
+    self.assertEqual(len(result1), 6)
+    self.assertAlmostEqual(result1[0], 0.166344, places=5)
+    self.assertAlmostEqual(result1[1], 0.166344, places=5)
+    self.assertAlmostEqual(result1[2], 0.166344, places=5)
+    self.assertAlmostEqual(result1[3], 0.166344, places=5)
+    self.assertAlmostEqual(result1[4], 0.167847, places=5)
+    self.assertAlmostEqual(result1[5], 0.166777, places=5)
+    self.assertEqual(len(result1), len(result2))
+    for i in range(len(result1)):
+      self.assertAlmostEqual(result1[i], result2[i], places=5)
 
+  def testSerialization2(self):
+    # This test verifies that pickle works for pickle of a Predictor
+    SDR1 = SDR(15);  SDR1.sparse = [1, 5, 9]
+    SDR2 = SDR(15);  SDR2.sparse = [0, 6, 9, 11]
+    SDR3 = SDR(15);  SDR3.sparse = [6, 9]
+    SDR4 = SDR(15);  SDR4.sparse = [1, 5, 9]
+    
+    c1 = Predictor( steps=[1], alpha=1.0 )
+    c1.learn(1, pattern=SDR1, classification=4)
+    c1.learn(2, pattern=SDR2, classification=5)
+    c1.learn(3, pattern=SDR3, classification=5)
+    c1.learn(4, pattern=SDR4, classification=4)
+    c1.learn(5, pattern=SDR4, classification=4)
+    
+    serialized = pickle.dumps(c1)
+    c2 = pickle.loads(serialized)
+
+    result1 = c1.infer(SDR1)
+    result2 = c2.infer(SDR1)
+    #print("  testSerialization2 result: %.6f, %.6f, %.6f, %.6f, %.6f, %.6f "%( result1[1][0], result1[1][1], result1[1][2], result1[1][3], result1[1][4], result1[1][5]));
+    self.assertEqual(len(result1[1]), 6)
+    self.assertEqual(len(result1[1]), len(result2[1]))
+    for i in range(len(result1[1])):
+      self.assertAlmostEqual(result1[1][i], result2[1][i], places=5)
+
+  def testSerialization3(self):
+    # This test verifies that saveToFile() and loadFromFile() on Classifier are accessable from Python.
+    SDR1 = SDR(15);  SDR1.sparse = [1, 5, 9]
+    SDR2 = SDR(15);  SDR2.sparse = [0, 6, 9, 11]
+    SDR3 = SDR(15);  SDR3.sparse = [6, 9]
+    SDR4 = SDR(15);  SDR4.sparse = [1, 5, 9]
+    c1 = Classifier()
+    c1.learn(pattern=SDR1, classification=4)
+    c1.learn(pattern=SDR2, classification=5)
+    c1.learn(pattern=SDR3, classification=5)
+    c1.learn(pattern=SDR4, classification=4)
+
+    # The Predictor now has some data in it, try serialization.
+    file = "Classifier_test_save.XML"
+    c1.saveToFile(file, "XML")
+    c2 = Classifier()
+    c2.loadFromFile(file, "XML")
+    os.remove(file)
+
+    result1 = c1.infer(SDR1)
+    result2 = c2.infer(SDR1)
+    self.assertEqual(len(result1), len(result2))
+    for i in range(len(result1)):
+      self.assertAlmostEqual(result1[i], result2[i], places=5)
+  
+  def testSerialization4(self):
+    # This test verifies that saveToFile() and loadFromFile with BINARY on Classifier are accessible from Python.
+    inputData  = SDR( 1000 ).randomize( 0.02 )
+    categories = { 'A': 0, 'B': 1, 'C': 2, 'D': 3 }
+    c1 = Classifier()
+    c1.learn(inputData, categories['B'] )
+    file = "Classifier_test_save.BINARY"
+    c1.saveToFile(file)
+    
+    c2 = Classifier()
+    c2.loadFromFile(file)
+    result2 = c2.infer( inputData )
+    self.assertTrue(numpy.argmax( result2 )  ==  categories['B'])
+    os.remove(file)
+
+  def testSerialization5(self):
+    # This test verifies that saveToFile() and loadFromFile with JSON on Predictor are accessible from Python.
+    inputData  = SDR( 1000 ).randomize( 0.02 )
+    categories = { 'A': 0, 'B': 1, 'C': 2, 'D': 3 }
+    c1 = Predictor( steps=[1], alpha=1.0 )
+    c1.learn(1, inputData, categories['B'] )
+    file = "Predictor_test_save.JSON"
+    c1.saveToFile(file, "JSON")
+
+    c2 = Predictor( steps=[1], alpha=1.0 )
+    c2.loadFromFile(file, "JSON")
+    os.remove(file)
 
 if __name__ == "__main__":
   unittest.main()

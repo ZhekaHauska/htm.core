@@ -164,6 +164,8 @@ namespace htm {
       ar(cereal::make_nvp("size", args_.size));
       ar(cereal::make_nvp("radius", args_.radius));
       ar(cereal::make_nvp("resolution", args_.resolution));
+
+      BaseEncoder<Real64>::initialize({ args_.size });
     }
 
     ~ScalarEncoder() override {};

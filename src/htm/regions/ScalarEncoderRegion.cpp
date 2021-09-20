@@ -33,14 +33,16 @@ namespace htm {
 
 ScalarEncoderRegion::ScalarEncoderRegion(const ValueMap &params, Region *region)
     : RegionImpl(region) {
-  params_.size = params.getScalarT<UInt32>("size", params.getScalarT<UInt32>("n", 0));
-  params_.activeBits = params.getScalarT<UInt32>("activeBits", params.getScalarT<UInt32>("w", 0));
-  params_.resolution = params.getScalarT<Real64>("resolution", 0.0);
-  params_.radius = params.getScalarT<Real64>("radius", 0.0);
   params_.minimum = params.getScalarT<Real64>("minValue", -1.0);
   params_.maximum = params.getScalarT<Real64>("maxValue", +1.0);
-  params_.periodic = params.getScalarT<bool>("periodic", false);
   params_.clipInput = params.getScalarT<bool>("clipInput", false);
+  params_.periodic = params.getScalarT<bool>("periodic", false);
+  params_.category = params.getScalarT<bool>("category", false);
+  params_.activeBits = params.getScalarT<UInt32>("activeBits", params.getScalarT<UInt32>("w", 0));
+  params_.sparsity = params.getScalarT<Real32>("sparsity", 0.0);
+  params_.size = params.getScalarT<UInt32>("size", params.getScalarT<UInt32>("n", 0));
+  params_.radius = params.getScalarT<Real64>("radius", 0.0);
+  params_.resolution = params.getScalarT<Real64>("resolution", 0.0);
 
   encoder_ = std::make_shared<ScalarEncoder>( params_ );
 
@@ -132,7 +134,8 @@ ScalarEncoderRegion::~ScalarEncoderRegion() {}
                                    ParameterSpec::ReadWriteAccess));
 
   ns->parameters.add("size", 
-                     ParameterSpec("The length of the encoding. Size of buffer",
+                     ParameterSpec("The length of the encoding. Size of buffer. "
+                                   "Use one of: 'size', 'radius', 'resolution', or 'category'.",
                                         NTA_BasicType_UInt32,
                                         1,   // elementCount
                                         "",  // constraints
@@ -146,7 +149,9 @@ ScalarEncoderRegion::~ScalarEncoderRegion() {}
                                         ParameterSpec::CreateAccess));
 
   ns->parameters.add("activeBits", 
-                     ParameterSpec("The number of active bits in the encoding. i.e. how sparse", NTA_BasicType_UInt32,
+                     ParameterSpec("The number of active bits in the encoding. i.e. how sparse is it."
+                                   "Use one of: 'activeBits' or 'sparsity'.",
+                                   NTA_BasicType_UInt32,
                                    1,   // elementCount
                                    "",  // constraints
                                    "0", // defaultValue
@@ -159,14 +164,16 @@ ScalarEncoderRegion::~ScalarEncoderRegion() {}
                                    ParameterSpec::CreateAccess));
 
   ns->parameters.add("resolution",
-                     ParameterSpec("The resolution for the encoder",
+                     ParameterSpec("The resolution for the encoder "
+                                   "Use one of: 'size', 'radius', 'resolution', or 'category'.",
                                    NTA_BasicType_Real64,
                                    1,   // elementCount
                                    "",  // constraints
                                    "0", // defaultValue
                                    ParameterSpec::CreateAccess));
 
-  ns->parameters.add("radius", ParameterSpec("The radius for the encoder",
+  ns->parameters.add("radius", ParameterSpec("The radius for the encoder. "
+                                   "Use one of: 'size', 'radius', 'resolution', or 'category'.",
                                   NTA_BasicType_Real64,
                                   1,   // elementCount
                                   "",  // constraints
@@ -205,6 +212,23 @@ ScalarEncoderRegion::~ScalarEncoderRegion() {}
                                   "",      // constraints
                                   "false", // defaultValue
                                   ParameterSpec::CreateAccess));
+  ns->parameters.add("sparsity",
+                    ParameterSpec(
+                                  "Sparsity is the number of active bits divided by the total number of bits. "
+                                  "Use one of: 'activeBits' or 'sparsity'.",
+                                  NTA_BasicType_Real32,
+                                  1,       // elementCount
+                                  "",      // constraints
+                                  "false", // defaultValue
+                                  ParameterSpec::CreateAccess));
+  ns->parameters.add("category",
+                     ParameterSpec("Whether the encoder parameter is a category. "
+                                   "Use one of: 'size', 'radius', 'resolution', or 'category'.",
+                                   NTA_BasicType_Bool,
+                                   1,       // elementCount
+                                   "",      // constraints
+                                   "false", // defaultValue
+                                   ParameterSpec::CreateAccess));
 
    /* ----- inputs ------- */
   ns->inputs.add("values",
@@ -237,7 +261,8 @@ ScalarEncoderRegion::~ScalarEncoderRegion() {}
 Real64 ScalarEncoderRegion::getParameterReal64(const std::string &name, Int64 index) const {
   if (name == "sensedValue") {
     return sensedValue_;
-  } else if (name == "resolution") return encoder_->parameters.resolution;
+  } else if (name == "resolution") 
+    return encoder_->parameters.resolution;
   else if (name == "radius")
     return encoder_->parameters.radius;
   else if (name == "minValue")
@@ -249,11 +274,21 @@ Real64 ScalarEncoderRegion::getParameterReal64(const std::string &name, Int64 in
   }
 }
 
+Real32 ScalarEncoderRegion::getParameterReal32(const std::string &name, Int64 index) const {
+  if (name == "sparsity") 
+    return encoder_->parameters.sparsity;
+  else {
+    return RegionImpl::getParameterReal32(name, index);
+  }
+}
+
 bool ScalarEncoderRegion::getParameterBool(const std::string& name, Int64 index) const {
   if (name == "periodic") 
     return encoder_->parameters.periodic;
   if (name == "clipInput")
     return encoder_->parameters.clipInput;
+  if (name == "category")
+    return encoder_->parameters.category;
   else {
     return RegionImpl::getParameterBool(name, index);
   }
@@ -262,8 +297,7 @@ bool ScalarEncoderRegion::getParameterBool(const std::string& name, Int64 index)
 UInt32 ScalarEncoderRegion::getParameterUInt32(const std::string &name, Int64 index) const {
   if (name == "n" || name == "size") {
     return (UInt32)encoder_->size;
-  }
-  else if (name == "w" || name == "activeBits") {
+  } else if (name == "w" || name == "activeBits") {
     return encoder_->parameters.activeBits;
   } else {
     return RegionImpl::getParameterUInt32(name, index);
@@ -288,6 +322,7 @@ bool ScalarEncoderRegion::operator==(const RegionImpl &o) const {
   if (params_.periodic != other.params_.periodic) return false;
   if (params_.activeBits != other.params_.activeBits) return false;
   if (params_.sparsity != other.params_.sparsity) return false;
+  if (params_.category != other.params_.category) return false;
   if (params_.size != other.params_.size) return false;
   if (params_.radius != other.params_.radius) return false;
   if (params_.resolution != other.params_.resolution) return false;

@@ -68,6 +68,17 @@ PDF Classifier::infer(const SDR & pattern) const {
 }
 
 
+// An overload of learn(SDR, vector) so that a single category can be learned
+// without having to construct a vector before calling.
+void Classifier::learn(const SDR &pattern, UInt category)
+{
+  std::vector<UInt> categoryList;
+  categoryList.push_back(category);
+  learn(pattern, categoryList);
+}
+
+// If you have more than one category to be learned with this pattern,
+// pass in an array of categories using this overlay.
 void Classifier::learn(const SDR &pattern, const vector<UInt> &categoryIdxList)
 {
   // If this is the first time the Classifier is being used, weights are empty, 
@@ -189,6 +200,12 @@ Predictions Predictor::infer(const SDR &pattern) const {
   return result;
 }
 
+void Predictor::learn(const UInt recordNum, const SDR &pattern, UInt bucketIdx)
+{
+  std::vector<UInt> bucketIdxList;
+  bucketIdxList.push_back(bucketIdx);
+  learn(recordNum, pattern, bucketIdxList);
+}
 
 void Predictor::learn(const UInt recordNum, //TODO make recordNum optional, autoincrement as steps 
 		      const SDR &pattern,

@@ -34,7 +34,7 @@
 if(EXISTS "${REPOSITORY_DIR}/build/ThirdParty/share/boost.tar.gz")
     set(BOOST_URL "${REPOSITORY_DIR}/build/ThirdParty/share/boost.tar.gz")
 else()
-    set(BOOST_URL "https://dl.bintray.com/boostorg/release/1.72.0/source/boost_1_72_0.tar.gz")
+    set(BOOST_URL "https://boostorg.jfrog.io/artifactory/main/release/1.76.0/source/boost_1_76_0.tar.gz")
 endif()
 
 # Download the boost distribution (at configure time).

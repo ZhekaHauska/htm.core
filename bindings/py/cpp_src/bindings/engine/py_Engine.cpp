@@ -67,13 +67,22 @@ namespace htm_ext
             .def(py::init<UInt, UInt, UInt>());
 
         // members
-        py_Dimensions.def("getCount", &Dimensions::getCount)
+        py_Dimensions.def("getCount", &Dimensions::getCount) 
             .def("size", &Dimensions::size)
+            .def("empty", &Dimensions::empty)
+            .def("clear", &Dimensions::clear)
+            .def("resize", &Dimensions::resize)
+            .def("push_back", &Dimensions::push_back)
+            .def("push_front", &Dimensions::push_front)
             .def("isUnspecified", &Dimensions::isUnspecified)
             .def("isDontcare", &Dimensions::isDontcare)
             .def("isSpecified", &Dimensions::isSpecified)
             .def("isInvalid", &Dimensions::isInvalid)
             .def("toString", &Dimensions::toString, "", py::arg("humanReadable") = true)
+            .def("asVector", [](const Dimensions &self) {
+                const std::vector<UInt>& vect_arr = self.asVector();
+                py::array ret =  py::cast(vect_arr);
+                return ret;})
             ;
 
         // operator overloading
@@ -403,7 +412,18 @@ namespace htm_ext
 
         py_Network.def("addRegion", (Region_Ptr_t (htm::Network::*)(
                     const std::string&,
-                      const std::string&,
+                    const std::string&,
+                    const std::string&,
+                    const std::set<UInt32> &phases))
+                    &htm::Network::addRegion,
+                    "Normal add region."
+                    , py::arg("name")
+                    , py::arg("nodeType" )
+                    , py::arg("nodeParams")
+                    , py::arg("phases"));
+        py_Network.def("addRegion", (Region_Ptr_t (htm::Network::*)(
+                    const std::string&,
+                    const std::string&,
                     const std::string&))
                     &htm::Network::addRegion,
                     "Normal add region."
@@ -429,14 +449,22 @@ namespace htm_ext
             .def("getMinEnabledPhase", &htm::Network::getMinPhase)
             .def("getMaxEnabledPhase", &htm::Network::getMaxPhase)
             .def("setPhases",          &htm::Network::setPhases)
-            .def("run",                &htm::Network::run);
+            .def("getExecutionMap",    &htm::Network::getExecutionMap);
+            
+        py_Network.def("run", (void (htm::Network::*)(int n)) &htm::Network::run
+             , "Executes all phases n times."
+             , py::arg("n"));
+        py_Network.def("run", (void (htm::Network::*)(int n, std::vector<UInt32> phases)) &htm::Network::run
+             , "Execute a set of phases in the given order, repeating n times."
+             , py::arg("n"), py::arg("phases"));
+             
 
         py_Network.def("initialize", &htm::Network::initialize);
 
         py_Network.def("save",      &htm::Network::save)
             .def("load",            &htm::Network::load)
-            .def("saveToFile",      &htm::Network::saveToFile, py::arg("file"), py::arg("fmt") = SerializableFormat::BINARY)
-            .def("loadFromFile",    &htm::Network::loadFromFile, py::arg("file"), py::arg("fmt") = SerializableFormat::BINARY)
+            .def("saveToFile",      static_cast<void (htm::Network::*)(std::string, std::string) const>(&htm::Network::saveToFile), py::arg("file"), py::arg("fmt") = "BINARY")
+            .def("loadFromFile",    static_cast<void (htm::Network::*)(std::string, std::string)>(&htm::Network::loadFromFile), py::arg("file"), py::arg("fmt") = "BINARY")
             .def("__eq__",          &htm::Network::operator==);
             
         py_Network.def(py::pickle(

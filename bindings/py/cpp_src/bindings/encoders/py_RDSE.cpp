@@ -96,6 +96,7 @@ not allow for decoding SDRs into the inputs which likely created it.
 
 To inspect this run:
 $ python -m htm.examples.encoders.rdse --help)");
+        py_RDSE.def(py::init<>(), R"( For use with loadFromFile. )");
         py_RDSE.def(py::init<RDSE_Parameters>());
 
         py_RDSE.def_property_readonly("parameters",
@@ -117,13 +118,13 @@ fields are filled in automatically.)");
         });
 
 	// Serialization
-	// loadFromString
+  // loadFromString
         py_RDSE.def("loadFromString", [](RDSE& self, const py::bytes& inString) {
           std::stringstream inStream(inString.cast<std::string>());
           self.load(inStream, JSON);
         });
 
-        // writeToString
+  // writeToString
         py_RDSE.def("writeToString", [](const RDSE& self) {
           std::ostringstream os;
           os.flags(ios::scientific);
@@ -133,24 +134,29 @@ fields are filled in automatically.)");
        });
 
 	// pickle
-        py_RDSE.def(py::pickle(
+       py_RDSE.def(py::pickle(
           [](const RDSE& self) {
             std::stringstream ss;
             self.save(ss);
             return py::bytes( ss.str() );
           },
           [](py::bytes &s) {
-	    std::stringstream ss( s.cast<std::string>() );
-	    std::unique_ptr<RDSE> self(new RDSE());
+            std::stringstream ss( s.cast<std::string>() );
+            std::unique_ptr<RDSE> self(new RDSE());
             self->load(ss);
             return self;
-        }));
+       }));
 
-        py_RDSE.def("saveToFile",
-	  [](RDSE &self, const std::string& filename) { self.saveToFile(filename, SerializableFormat::BINARY); });
+  // loadFromFile
+       py_RDSE.def("saveToFile",
+         static_cast<void (htm::RDSE::*)(std::string, std::string) const>(&htm::RDSE::saveToFile), 
+         py::arg("file"), py::arg("fmt") = "BINARY",
+         R"(Serializes object to file. file: filename to write to.  fmt: format, one of 'BINARY', 'PORTABLE', 'JSON', or 'XML')");
 
-        py_RDSE.def("loadFromFile",
-	  [](RDSE &self, const std::string& filename) { return self.loadFromFile(filename, SerializableFormat::BINARY); });
+       py_RDSE.def("loadFromFile",    
+         static_cast<void (htm::RDSE::*)(std::string, std::string)>(&htm::RDSE::loadFromFile), 
+         py::arg("file"), py::arg("fmt") = "BINARY",
+         R"(Deserializes object from file. file: filename to read from.  fmt: format recorded by saveToFile(). )");
 
 
     }

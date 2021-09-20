@@ -134,6 +134,7 @@ public:
 
   /**
    * Make input data available.
+   * Pulls data from output buffers to populate input buffer.
    *
    * Called by Region.prepareInputs()
    */

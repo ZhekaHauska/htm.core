@@ -116,7 +116,7 @@ class NetworkTest(unittest.TestCase):
                        }))
 
       # Serialize
-      # Note: This will do the following:
+      # Note: saveToFile() will do the following:
       #    - Call network.saveToFile(), in C++. this opens the file.
       #    - that calls network.save(stream) 
       #    - that will use Cereal to serialize the Network object.
@@ -124,13 +124,17 @@ class NetworkTest(unittest.TestCase):
       #    - that will serialize PyBindRegion object because this is a python Region.
       #    - that will use pickle to serialize SerializationTestPyRegion in
       #                serialization_test_py_region.py into Base64.
-      srcNet.saveToFile(file_path, engine.SerializableFormat.BINARY)
+      #
+      #      loadFromFile() will do the following:
+      #    - Call network.loadFromFile() in C++.  This opens the file
+      #    - that calls network.load(stream)
+      #    - that will recursivly deserialize and load all of the objects under network.
 
-
-      # Deserialize
+      srcNet.saveToFile(file_path, "BINARY")
       destNet = engine.Network()
-      destNet.loadFromFile(file_path)
+      destNet.loadFromFile(file_path, "BINARY")
 
+      # confirm that it works
       destRegion = destNet.getRegion(SerializationTestPyRegion.__name__)
 
       self.assertEqual(destRegion.getParameterUInt32("dataWidth"), 128)
@@ -379,4 +383,32 @@ class NetworkTest(unittest.TestCase):
     self.assertEqual(s1,"Hello World says: arg1=26 arg2=64")
     self.assertEqual(s1, s2,  "Simple Network pickle/unpickle failed.")
 
+  def testNetworkSerialization(self):
+    """
+    Test JSON text serialization for the network.
+    The C++ unit tests does a more complete job of checking serialization.
+    All we really care about here is being able to call it from Python.
+    """
+    network  = engine.Network()
+    r_from = network.addRegion("from", "py.LinkRegion", "")
+    r_to = network.addRegion("to", "py.LinkRegion", "")
+    cnt = r_from.getOutputElementCount("UInt32")
+    self.assertEqual(5, cnt)
+
+    network.link("from", "to", "", "", "UInt32", "UInt32")
+    network.link("from", "to", "", "", "Real32", "Real32")
+    network.link("from", "to", "", "", "Real32", "UInt32")
+    network.link("from", "to", "", "", "UInt32", "Real32")
+    network.initialize()
+    
+    filename = "Tests/NetworkSerialized.json"
+    network.saveToFile(filename, "JSON");
+    network2 = engine.Network()
+    network2.loadFromFile(filename, "JSON")
+    
+    s1 = network.getRegion("to").executeCommand("HelloWorld", "26", "64");
+    s2 = network2.getRegion("to").executeCommand("HelloWorld", "26", "64");
+
+    self.assertEqual(s1,"Hello World says: arg1=26 arg2=64")
+    self.assertEqual(s1, s2,  "Simple Network pickle/unpickle failed.")
 

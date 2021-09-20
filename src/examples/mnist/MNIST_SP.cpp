@@ -41,16 +41,12 @@
 #include <htm/os/Timer.hpp>
 
 #ifdef MSVC
-#pragma warning(push)
 #pragma warning(disable : 4244) // warning C4244: '=': conversion from 'double' to 'unsigned char', possible loss of data
 #endif
 
 #include <mnist/mnist_reader.hpp> // MNIST data itself + read methods, namespace mnist::
 #include <mnist/mnist_utils.hpp>  // mnist::binarize_dataset
 
-#ifdef MSVC
-#pragma warning(pop)
-#endif
 
 using namespace std;
 using namespace htm;
@@ -160,7 +156,7 @@ void train(const bool skipSP=false, const UInt maxSamples=0 /* 0=unlimited, or l
       input.setDense( image );
       if(not skipSP) 
         sp.compute(input, true, columns);
-      clsr.learn( skipSP ? input : columns, {label} );
+      clsr.learn( skipSP ? input : columns, label );
       if( verbosity && (++i % 1000 == 0) ) cout << "." << flush;
       sample++;
       if(maxSamples > 0 and sample >= maxSamples) {

@@ -3,7 +3,9 @@
 Network API is all about experimenting and building apps from the HTM building blocks (or regions) which are wrappers around the htm algorithms. See [Network API Regions](NetworkAPI_Regions.md).   But to be useful, we also need to be able to connect up those building blocks so that data can flow between them. We do that with links.
 
 ## Data Flow
-A link is a data path with buffers on both ends.  The buffer on the source end of the link are assiciated with an output of a region. The buffer on the destination end of the link is associated with an input to a region.  On each iteration of a run, each region is executed. As a region is executed, it will first move the data in the buffer on the source side to the buffer on the destination side of any links connected to its inputs. Then it will call the underlining algorithm to generated some output.  That output is moved to the output buffer.
+A link is a data path with buffers on both ends.  The buffer on the source end of the link are assiciated with an output of a region. The buffer on the destination end of the link is associated with an input to a region.  
+
+When a region is executed, it will call the underlining algorithm using data from the input buffer to generated some output.  That output is moved to the output buffer. After each region is executed its outputs are propogated through all links assigned to that output. 
 
 Here is an example of a NetworkAPI configuration using JSON syntax:
 ```
@@ -14,18 +16,18 @@ Here is an example of a NetworkAPI configuration using JSON syntax:
        {addRegion: {name: "fileOutput", type "FileOutputRegion", params: {outputFile: "result.csv"}
        {addLink:   {src: "encoder.encoded", dest: "sp.bottomUpIn"}},
        {addLink:   {src: "sp.bottomUpOut", dest: "tm.bottomUpIn"}}
-       {addLink:   {src: "tm.bottomUpOut", dest: "fileOutput.DataOut"}}
+       {addLink:   {src: "tm.bottomUpOut", dest: "fileOutput.DataIn"}}
     ]})";
 ```
 The app, in a loop, would set a value in the parameter "sensedValue" on the encoder then call `run(1)`.
 
 As you can see in this diagram, on a single iteration of a run, data will flow through the blocks from one to another.
 ![Example Layout](./images/DocsImage1.JPG)
-The regions are executed in the order that they are declared in the configuration.  Here is basicly what happens:
-- The encoder has no inputs so no data is moved.  The encoder is executed and using the current value of the parameter SensedValue, produces data in the "encoded" output of the encoder.
-- The sp region has a link to an input so the encoder's 'encoded' output buffer is moved to the buffer of the 'bottomUpIn' input of the SP as specified in the link.  The SP is executed with that input and produces an output in sp.bottomUpOut.
-- The tm region has a link so the buffer in sp.bottomUpOut is moved to tm.bottomUpIn.  TM is executed and produces data on several outputs.
-- The FileOutput region has a link so the buffer in tm.bottomUpOut is moved to fileOutput.DataOut. Then the FileOutput region is executed and saves the data into the file.
+The regions are executed in the order that they are declared in the configuration (modified by the phase into which they may be placed).  Here is basicly what happens:
+- The encoder has no links connected to its inputs.  The encoder is executed and using the current value of the parameter SensedValue, produces data in the "encoded" output of the encoder. That data is then distributed along the output link to connected input buffer named "bottomUpIn" of the sp region.
+- The SP is executed with that input and produces an output in sp.bottomUpOut. The sp region has a link connected to its output so the buffer in sp.bottomUpOut is moved to tm.bottomUpIn.
+- TM is executed and produces data on several outputs but only one has a link. The FileOutput region is connected from TM with a link so the buffer in tm.bottomUpOut is moved to fileOutput.DataOut. 
+- Then the FileOutput region is executed and saves the data in its input buffer fileOutput.DataIn, into the file.
 
 So the data cascades through the links.
 
@@ -39,13 +41,14 @@ The syntax for a Link declaration using JSON format:
 addLink: {src: "<srcName>.<srcOutput>",
           dest: "<destName>.<destInput>",
           dim: [<dimensions>], 
+          mode: [<"overwrite" or "<fanin>"]
           delay: <propogationDelay>}
          }
 ```
 
 The syntax for a Link declaration using C++ calls:
 ```
-link(<srcName>, <destName>, "", "{dim: [<dimensions>]}", <srcOutput>, <destInput>, <propogationDelay>);
+link(<srcName>, <destName>, "", "{dim: [<dimensions>], mode: <"overwrite" or "fanin">}", <srcOutput>, <destInput>, <propogationDelay>);
 ```
 
 The syntax for a Link declaration using Python calls:
@@ -55,6 +58,8 @@ link(srcName, destName, LinkType, LinkParams, srcOutput, destInput, propogationD
 - The `srcName` and `destName` are the names given to the two region instances that are the endpoints of the links.
 
 - The optional `dim` parameter is only required for the special case of the "INPUT" source discussed later. 
+
+- The optional `mode` parameter is only needed if there are more than one link connected to the destination buffer. A value of "overwrite" means the outputs from each link will overwrite the entire input buffer.  The last output to execute wins.  A value of "fanin" means put the outputs from each link into separate portions of the input buffer.  See more about the Fan-In condition below. If not given, the mode is "fanin".
 
 - The `srcOutput` and `destInput` are the targets of the link on their respecitive regions.  For backward compatability, if either is not given or blank (not recomended), they are the ones identified as the default for the region in the Spec. 
 
@@ -89,15 +94,15 @@ For example, if the source buffer consist of a C-type array of Real32 values and
 ## Fan-In
 There may be times when more than one region output should be connected to a single input of a region. To implement, configure a link for each output and indicate the same target input.
 
-When this occurs, the data from each source is converted to the type of the destination and then their buffers are concatinated.  So, the input buffer size will be the sum of the widths of all of the source buffers.
+If the `overwrite` mode was not specified, the data from each source is converted to the type of the destination and then their buffers are concatinated.  So, the input buffer size will be the sum of the widths of all of the source buffers.
 
 This is convenent for the construction of an app that employs multiple encoders to encode independent variables.  It is the concatination of the encoder outputs that should be presented to the SP to turn this into a true SDR.
 
 ## Fan-Out
-There may be times that a single source output will be connected to multiple destination inputs.  To implement, use one link per input and reference the same source output. The data is moved to a destination input when that destination region is executed.
+There may be times that a single source output will be connected to multiple destination inputs.  To implement, use one link per input and reference the same source output. The data is moved to a destination input when that source region is executed.
 
 ## Propogation Delay
-The link also has the feature of being able to delay the propogation of an output buffer by a number of run iterations.  This is configured by setting the link property `propogationDelay` to the number of run iterations to delay.  Normally this is 0 and there is no delay.  The propogationDelay queue is rotated at the beginning of the run so the source being propogated to the input is the buffer at the top of the queue.
+The link also has the feature of being able to delay the propogation of an output buffer by a number of run iterations.  This is configured by setting the link property `propogationDelay` to the number of run iterations to delay.  Normally this is 0 and there is no delay.  The propogationDelay queue is rotated after an output is generated. The value in the output buffer is placed into the bottom of the queue and the value being propogated to the input is the buffer at the top of the queue.
 
 For example. If the propogationDelay is set to 2 then the propogation will be something like this:
 ```
@@ -157,12 +162,17 @@ Sometimes we want the app to provide the data that will be in the input buffer o
 
 The source_name argument is an identifier of your choice that matches the link which will be used. This allows the app to provide multiple streams of data, each with their own source_name and their own corresponding link.
 
-Since the link will not be able to infer the dimensions on this source, this link declaration must include the dimsions of the data that the app will be providing.  This dimension will be available for the link to infer the dimensions of the input which is the target of the link.
+Since the link will not be able to infer the dimensions on this source, this link declaration must include the dimensions of the data that the app will be providing.  This dimension will be available for the link to infer the dimensions of the input which is the target of the link.  For example, use `"{dim: [<dimensions>]}"` as the link parameter.
 
-Here is an example that might show up in a JSON configuration for NetworkAPI. Our `<source_name>` field is `source1` in this case and a call to setInputData( ... ) to feed data to this link must use `source1` as the first argument.
+Here is an example that might show up in a JSON configuration for NetworkAPI. Our `<source_name>` field is `source1` in this case and a call to setInputData( ... ) to feed data to this link must use `source1` as the first argument.  
+If you are defining the links directly use:
+```
+network.link("INPUT", "sp", "", "{dim: [100]}", "source1", "bottomUpIn");
+```
+If you are defining the links in a configuration string to be used with network.config() then the link portions would include:
 ```
     {addLink:   {src: "INPUT.source1", dest: "sp.bottomUpIn", dim: [100]}},
 ```
 
-Note that all of the Link features such as Fan-In, Fan-Out, propogation delay, and type conversion apply to this special link.
+Note that all of the Link features such as Fan-In, Fan-Out, mode, propogation delay, and type conversion apply to this special link.
 

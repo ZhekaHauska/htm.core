@@ -52,7 +52,7 @@
 #define VERBOSE if(verbose)std::cerr << "[          ] "
 static bool verbose = false;  // turn this on to print extra stuff for debugging the test.
 
-const UInt EXPECTED_SPEC_COUNT =  11u;  // The number of parameters expected in the ScalarSensor Spec
+const UInt EXPECTED_SPEC_COUNT =  13u;  // The number of parameters expected in the ScalarSensor Spec
 
 using namespace htm;
 namespace testing 
@@ -70,7 +70,7 @@ namespace testing
     VERBOSE << *ns << std::endl;
 
     std::shared_ptr<Region> region1 = net.addRegion("region1", "ScalarEncoderRegion", "{n: 100, w: 10}"); 
-    std::set<std::string> excluded = {"n", "w", "size", "activeBits", "resolution", "radius"};
+    std::set<std::string> excluded = {"n", "w", "size", "activeBits", "resolution", "radius", "sparsity"};
     checkGetSetAgainstSpec(region1, EXPECTED_SPEC_COUNT, excluded, verbose);
     checkInputOutputsAgainstSpec(region1, verbose);
   }
@@ -287,7 +287,7 @@ namespace testing
       "defaultValue": "-1"
     },
     "size": {
-      "description": "The length of the encoding. Size of buffer",
+      "description": "The length of the encoding. Size of buffer. Use one of: 'size', 'radius', 'resolution', or 'category'.",
       "type": "UInt32",
       "count": 1,
       "access": "Create",
@@ -301,7 +301,7 @@ namespace testing
       "defaultValue": "0"
     },
     "activeBits": {
-      "description": "The number of active bits in the encoding. i.e. how sparse",
+      "description": "The number of active bits in the encoding. i.e. how sparse is it.Use one of: 'activeBits' or 'sparsity'.",
       "type": "UInt32",
       "count": 1,
       "access": "Create",
@@ -315,14 +315,14 @@ namespace testing
       "defaultValue": "0"
     },
     "resolution": {
-      "description": "The resolution for the encoder",
+      "description": "The resolution for the encoder Use one of: 'size', 'radius', 'resolution', or 'category'.",
       "type": "Real64",
       "count": 1,
       "access": "Create",
       "defaultValue": "0"
     },
     "radius": {
-      "description": "The radius for the encoder",
+      "description": "The radius for the encoder. Use one of: 'size', 'radius', 'resolution', or 'category'.",
       "type": "Real64",
       "count": 1,
       "access": "Create",
@@ -351,6 +351,20 @@ namespace testing
     },
     "clipInput": {
       "description": "Whether to clip inputs if they're outside [minValue, maxValue]",
+      "type": "Bool",
+      "count": 1,
+      "access": "Create",
+      "defaultValue": "false"
+    },
+    "sparsity": {
+      "description": "Sparsity is the number of active bits divided by the total number of bits. Use one of: 'activeBits' or 'sparsity'.",
+      "type": "Real32",
+      "count": 1,
+      "access": "Create",
+      "defaultValue": "false"
+    },
+    "category": {
+      "description": "Whether the encoder parameter is a category. Use one of: 'size', 'radius', 'resolution', or 'category'.",
       "type": "Bool",
       "count": 1,
       "access": "Create",
@@ -385,6 +399,7 @@ namespace testing
   }
 })";
 
+       
     Spec *spec = ScalarEncoderRegion::createSpec();
     std::string json = spec->toString();
     EXPECT_STREQ(json.c_str(), expected.c_str());
@@ -402,7 +417,9 @@ namespace testing
   "minValue": -1.000000,
   "maxValue": 1.000000,
   "periodic": false,
-  "clipInput": false
+  "clipInput": false,
+  "sparsity": 0.040000,
+  "category": false
 })";
 
     Network net1;

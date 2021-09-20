@@ -275,22 +275,17 @@ Documents can contain any number of tokens > 0. Token order in the document is
     /**
      * Serialization
      */
-    // file out
+    // loadFromFile
     py_SimHashDocumentEncoder.def("saveToFile",
-      [](SimHashDocumentEncoder &self, const std::string& filename) {
-        self.saveToFile(filename, SerializableFormat::BINARY);
-      },
-R"(
-Serialize current encoder instance out to a file.
-)");
-    // file in
-    py_SimHashDocumentEncoder.def("loadFromFile",
-	    [](SimHashDocumentEncoder &self, const std::string& filename) {
-        return self.loadFromFile(filename, SerializableFormat::BINARY);
-      },
-R"(
-Deserialize file contents into current object.
-)");
+      static_cast<void (htm::SimHashDocumentEncoder::*)(std::string, std::string) const>(&htm::SimHashDocumentEncoder::saveToFile), 
+      py::arg("file"), py::arg("fmt") = "BINARY",
+      R"(Serializes object to file. file: filename to write to.  fmt: format, one of 'BINARY', 'PORTABLE', 'JSON', or 'XML')");
+
+    py_SimHashDocumentEncoder.def("loadFromFile",    
+      static_cast<void (htm::SimHashDocumentEncoder::*)(std::string, std::string)>(&htm::SimHashDocumentEncoder::loadFromFile), 
+      py::arg("file"), py::arg("fmt") = "BINARY",
+      R"(Deserializes object from file. file: filename to read from.  fmt: format recorded by saveToFile(). )");
+
     // string out
     py_SimHashDocumentEncoder.def("writeToString",
         [](const SimHashDocumentEncoder& self) {

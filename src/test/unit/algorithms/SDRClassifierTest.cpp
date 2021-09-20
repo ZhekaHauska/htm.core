@@ -45,7 +45,7 @@ TEST(SDRClassifierTest, ExampleUsageClassifier)
       inputData.randomize( 0.02f );
   enum Category { A, B, C, D };
   Classifier clsr;
-  clsr.learn( inputData, { Category::B } );
+  clsr.learn( inputData, Category::B );
   ASSERT_EQ( argmax( clsr.infer( inputData ) ),  Category::B );
 
   // Estimate a scalar value.  The Classifier only accepts categories, so
@@ -54,7 +54,7 @@ TEST(SDRClassifierTest, ExampleUsageClassifier)
   double scalar = 567.8f;
   double minimum = 500.0f;
   double resolution = 10.0f;
-  clsr.learn( inputData, { (UInt)((scalar - minimum) / resolution) } );
+  clsr.learn( inputData, (UInt)((scalar - minimum) / resolution) );
   ASSERT_EQ( argmax( clsr.infer( inputData ) ) * resolution + minimum,  560.0f );
 }
 
@@ -73,10 +73,10 @@ TEST(SDRClassifierTest, ExampleUsagePredictor)
 
   // Make a Predictor and train it.
   Predictor pred( vector<UInt>{ 1, 2 } );
-  pred.learn( 0, sequence[0], { labels[0] } );
-  pred.learn( 1, sequence[1], { labels[1] } );
-  pred.learn( 2, sequence[2], { labels[2] } );
-  pred.learn( 3, sequence[3], { labels[3] } );
+  pred.learn( 0, sequence[0], labels[0] );
+  pred.learn( 1, sequence[1], labels[1] );
+  pred.learn( 2, sequence[2], labels[2] );
+  pred.learn( 3, sequence[3], labels[3] );
 
   // Give the predictor partial information, and make predictions
   // about the future.
@@ -203,7 +203,7 @@ TEST(SDRClassifierTest, SaveLoad) {
   // Train a Predictor with a few different things.
   SDR A({ 100u }); A.randomize( 0.10f );
   for(UInt i = 0; i < 10u; i++)
-    { c1.learn(i, A, {4u}); }
+    { c1.learn(i, A, 4u); }
   c1.reset();
   A.addNoise( 1.0f ); // Change every bit.
   for(UInt i = 0; i < 10u; i++)

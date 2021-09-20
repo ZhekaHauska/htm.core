@@ -207,6 +207,17 @@ R"(Returns pair of:
             auto C = new Connections();
             C->load( buf );
             return C; } );
+            
+		// saving and loading from file
+    py_Connections.def("saveToFile",
+     static_cast<void (htm::Connections::*)(std::string, std::string) const>(&htm::Connections::saveToFile), 
+     py::arg("file"), py::arg("fmt") = "BINARY",
+     "Serializes object to file. file: filename to write to.  fmt: format, one of 'BINARY', 'PORTABLE', 'JSON', or 'XML'.");
+
+    py_Connections.def("loadFromFile",    
+     static_cast<void (htm::Connections::*)(std::string, std::string)>(&htm::Connections::loadFromFile), 
+     py::arg("file"), py::arg("fmt") = "BINARY",
+     "Deserializes object from file. file: filename to read from.  fmt: format recorded by saveToFile(). ");
 
   } // End function init_Connections
 }   // End namespace htm_ext

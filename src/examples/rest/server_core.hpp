@@ -69,6 +69,7 @@
 #include <sstream>
 #include <string>
 
+#ifdef __GNUC__
 // save diagnostic state
 #pragma GCC diagnostic push
 // turn off the specific warning. Can also use "-Wall"
@@ -76,6 +77,9 @@
 #include <httplib.h>
 // turn back on the compiler warnings
 #pragma GCC diagnostic pop
+#else
+#include <httplib.h>
+#endif
 
 #include <htm/engine/Network.hpp>
 #include <htm/engine/RESTapi.hpp>

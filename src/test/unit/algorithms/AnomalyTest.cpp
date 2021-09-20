@@ -14,6 +14,10 @@
  * You should have received a copy of the GNU Affero Public License
  * along with this program.  If not, see http://www.gnu.org/licenses.
  * --------------------------------------------------------------------- */
+#ifdef MSVC
+#pragma warning(                                                                                                       \
+    disable : 4244) // warning C4244: '=': conversion from 'double' to 'unsigned char', possible loss of data
+#endif
 
 #include <algorithm>
 #include <vector>

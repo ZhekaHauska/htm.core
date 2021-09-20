@@ -20,6 +20,8 @@
 #include <pybind11/numpy.h>
 #include <pybind11/stl.h>
 #include <pybind11/chrono.h>
+#include <pybind11/iostream.h>
+#include <sstream>
 namespace py = pybind11;
 
 #include <htm/encoders/DateEncoder.hpp>
@@ -136,6 +138,7 @@ R"( * The DateEncoder encodes up to 6 attributes of a timestamp value into an ar
     //    d = datetime.datetime(2010, 11, 4, 14, 55)
     //    SDR sdr = encoder(d)
     //
+    py_DateEnc.def(py::init<>(), R"( For use with loadFromFile. )");
     py_DateEnc.def(py::init<DateEncoderParameters&>(), R"()");
     
     py_DateEnc.def_property_readonly("parameters",
@@ -160,6 +163,48 @@ R"(Encodes a .py datetime.datetime into an SDR structure. )",
         self.encode( time_point, *output );
         return output; },
 R"(Encodes a .py datetime.datetime into an SDR structure. )");
+
+	// Serialization
+  // loadFromString
+        py_DateEnc.def("loadFromString", [](DateEncoder& self, const py::bytes& inString) {
+          std::stringstream inStream(inString.cast<std::string>());
+          self.load(inStream, JSON);
+        });
+
+  // writeToString
+        py_DateEnc.def("writeToString", [](const DateEncoder& self) {
+          std::ostringstream os;
+          os.flags(std::ios_base::scientific);
+          os.precision(std::numeric_limits<double>::digits10 + 1);
+          self.save(os, JSON); // see serialization in bindings for SP, py_SpatialPooler.cpp for explanation
+          return py::bytes( os.str() );
+       });
+
+	// pickle
+       py_DateEnc.def(py::pickle(
+          [](const DateEncoder& self) {
+            std::stringstream ss;
+            self.save(ss);
+            return py::bytes( ss.str() );
+          },
+          [](py::bytes &s) {
+            std::stringstream ss( s.cast<std::string>() );
+            std::unique_ptr<DateEncoder> self(new DateEncoder());
+            self->load(ss);
+            return self;
+       }));
+
+  // loadFromFile
+       py_DateEnc.def("saveToFile",
+         static_cast<void (htm::DateEncoder::*)(std::string, std::string) const>(&htm::DateEncoder::saveToFile), 
+         py::arg("file"), py::arg("fmt") = "BINARY",
+         R"(Serializes object to file. file: filename to write to.  fmt: format, one of 'BINARY', 'PORTABLE', 'JSON', or 'XML')");
+
+       py_DateEnc.def("loadFromFile",    
+         static_cast<void (htm::DateEncoder::*)(std::string, std::string)>(&htm::DateEncoder::loadFromFile), 
+         py::arg("file"), py::arg("fmt") = "BINARY",
+         R"(Deserializes object from file. file: filename to read from.  fmt: format recorded by saveToFile(). )");
+
   }
 
 }

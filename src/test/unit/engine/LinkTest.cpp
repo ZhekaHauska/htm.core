@@ -603,8 +603,6 @@ public:
 
   // Compute outputs from inputs and internal state
   void compute() override {
-    VERBOSE << "> Computing: " << getName() << " <\n";
-
     const Array &outputArray = out_->getData();
     NTA_CHECK(outputArray.getCount() == 3);
     NTA_CHECK(outputArray.getType() == NTA_BasicType_UInt64);
@@ -624,7 +622,10 @@ public:
     baseOutputBuffer[1] = ffInput[0];
     baseOutputBuffer[2] = latInput[0];
 
-    VERBOSE << getName() << ".compute: out=" << baseOutputBuffer[0] << "\n";
+    VERBOSE << getName() << ".compute: " 
+      << "feedForwardIn=" << ffInputArray 
+      << ", lateralIn=" << latInputArray 
+      << ", out=" << outputArray << "\n";
   }
 
 private:
@@ -706,7 +707,6 @@ public:
 
   // Compute outputs from inputs and internal state
   void compute() override {
-    VERBOSE << "> Computing: " << getName() << " <\n";
 
     const Array &outputArray = out_->getData();
     NTA_CHECK(outputArray.getCount() == 2);
@@ -717,16 +717,14 @@ public:
     UInt64 *inputBuffer = (UInt64*)inputArray.getBuffer();
     NTA_CHECK(inputArray.getCount() >= 1);
 
-    VERBOSE << getName() << ".compute: fbInput size=" << inputArray.getCount()
-            << "; inputValue=" << inputBuffer[0] << "\n";
-
     // Only the first element of baseOutputBuffer represents region output. We
     // keep track of inputs to the region using the rest of the baseOutputBuffer
     // vector. These inputs are used in the tests.
     baseOutputBuffer[0] = k_ + inputBuffer[0];
     baseOutputBuffer[1] = inputBuffer[0];
 
-    VERBOSE << getName() << ".compute: out=" << baseOutputBuffer[0] << "\n";
+    VERBOSE << getName() << ".compute: feedbackIn=" << inputArray 
+             << " out=" << outputArray << "\n";
   }
 
 private:
@@ -762,31 +760,16 @@ TEST(LinkTest, L2L4WithDelayedLinksAndPhases) {
   //   R4.out          L2TestRegion  3   -set by spec for output "out"
   //   R4.LateralIn    L2TestRegion  3   -set by size of R3 output "out"
   //
-  // Order of data movement:                        values during propogation (in link)
-  //                                        Iteration1         Iteration2         Iteration3
-  // phase1:                               out      in        out       in         out     in
-  //   R1.out -> R3.feedForwardIn         [1,0] -> [1,0]    [2,1]   -> [2,1]    [8,7]  ->[8,7]
-  //   R2.out -> R4.feedForwardIn         [5,0] -> [5,0]    [10,5]  -> [10,5]   [16,11] ->[16,11]
+  // Order of data movement:                       values at execution (in region)
+  //                                        Iteration1         Iteration2         Iteration3           Iteration 4
+  // phase1:                               in      out        in       out         in     out           in     out
+  //   R1.feedbackIn -> R1.out            [0,0] -> [1,0]    [0,0]   -> [1,0]     [1,1]   -> [2,1]     [1,1,0]  ->[2,1]
+  //   R2.feedbackIn -> R2.out            [0,0] -> [5,0]    [0,0]   -> [5,0]     [5,5]   -> [10,5]    [5,6,1]  ->[11,6]
   // phase2:
-  //   R3.out -> R1.feedbackIn  Delay 1   [1,1,0]  [0,0,0]  [7,2,5]    [1,1,0]  [19,8,11]  [7,2,5]
-  //             delayQue                        ->[1,1,0]           ->[7,2,5]           ->[19,8,11]
-  //   R3.out -> R4.LateralIn   Delay 1   [1,1,0]->[0,0,0]  [7,2,5]  ->[1,1,0]  [19,8,11]->[7,2,5]
-  //             delayQue                        ->[1,1,0]           ->[7,2,5]           ->[19,8,11]
-  //   R4.out -> R2.feedbackIn  Delay 1   [5,5,0]->[0,0,0]  [11,10,1]->[5,5,0]  [23,16,7]->[11,10,1]
-  //             delayQue                        ->[5,5,0]           ->[11,10,1]         ->[23,16,7]
-  //   R4.out -> R3.LateralIn   Delay 1   [5,5,0]->[0,0,0]  [11,10,1]->[5,5,0]  [23,16,7]->[11,10,1]
-  //             delayQue                        ->[5,5,0]           ->[11,10,1]         ->[23,16,7]
-  //
-  //                                                values at execution (in region)
-  //                                        Iteration1         Iteration2         Iteration3
-  // phase1:                               in      out        in       out         in     out
-  //   R1.feedbackIn -> R1.out            [0,0] -> [1,0]    [1,1]   -> [2,1]     [7,2]    ->[8,7]
-  //   R2.feedbackIn -> R2.out            [0,0] -> [5,0]    [5,5]   -> [10,5]    [11,10]  ->[16,11]
-  // phase2:
-  //   R3.feedforwardIn ->                [1,0]             [2,1]                [8,7]
-  //   R3.LateralIn     -> R3.out         [0,0,0]->[1,1,0]  [5,5,0]  ->[7,2,5]   [11,10,1]->[19,8,11]
-  //   R4.feedforwardIn ->                [5,0]             [10,5]               [16,11]
-  //   R4.LateralIn     -> R4.out         [0,0,0]->[5,5,0]  [1,1,0]  ->[11,10,1] [7,2,5]  ->[23,16,7]
+  //   R3.feedforwardIn ->                [1,0]             [1,0]                [2,1]                [2,1]
+  //   R3.LateralIn     -> R3.out         [0,0,0]->[1,1,0]  [0,0,0]  ->[1.1.0]   [5,5,0]  ->[7,2,5]   [6,5,1]  ->[8,2,6]
+  //   R4.feedforwardIn ->                [5,0]             [5,0]                [10,5]               [11,6]
+  //   R4.LateralIn     -> R4.out         [0,0,0]->[5,5,0]  [1,1,0]  ->[6,5,1]   [1,1,0]  ->[11,10,1] [7,2,5]  ->[18,11,7]
   //
   //
   //     .-------------.                                 .--------------.
@@ -911,64 +894,85 @@ TEST(LinkTest, L2L4WithDelayedLinksAndPhases) {
   net.run(1);
 
   // Validate R1
-  ASSERT_EQ(0u, r1OutBuf[1]); // feedbackIn from R3; delay=1
   ASSERT_EQ(1u, r1OutBuf[0]); // out (1 + feedbackIn)
+  ASSERT_EQ(0u, r1OutBuf[1]); // feedbackIn from R3; delay=1
 
   // Validate R2
-  ASSERT_EQ(0u, r2OutBuf[1]); // feedbackIn from R4; delay=1
   ASSERT_EQ(5u, r2OutBuf[0]); // out (5 + feedbackIn)
+  ASSERT_EQ(0u, r2OutBuf[1]); // feedbackIn from R4; delay=1
 
   // Validate R3
+  ASSERT_EQ(1u, r3OutBuf[0]); // out (feedForwardIn + lateralIn)
   ASSERT_EQ(1u, r3OutBuf[1]); // feedForwardIn from R1; delay=0
   ASSERT_EQ(0u, r3OutBuf[2]); // lateralIn from R4; delay=1
-  ASSERT_EQ(1u, r3OutBuf[0]); // out (feedForwardIn + lateralIn)
 
   // Validate R4
+  ASSERT_EQ(5u, r4OutBuf[0]); // out (feedForwardIn + lateralIn)
   ASSERT_EQ(5u, r4OutBuf[1]); // feedForwardIn from R2; delay=0
   ASSERT_EQ(0u, r4OutBuf[2]); // lateralIn from R3; delay=1
-  ASSERT_EQ(5u, r4OutBuf[0]); // out (feedForwardIn + lateralIn)
 
-  // ITERATION #2
+    // ITERATION #2
   net.run(1);
 
   // Validate R1
-  ASSERT_EQ(1u, r1OutBuf[1]); // feedbackIn from R3; delay=1
-  ASSERT_EQ(2u, r1OutBuf[0]); // out (1 + feedbackIn)
+  ASSERT_EQ(1u, r1OutBuf[0]); // out (1 + feedbackIn)
+  ASSERT_EQ(0u, r1OutBuf[1]); // feedbackIn from R3; delay=1
 
   // Validate R2
-  ASSERT_EQ(5u, r2OutBuf[1]);  // feedbackIn from R4; delay=1
-  ASSERT_EQ(10u, r2OutBuf[0]); // out (5 + feedbackIn)
+  ASSERT_EQ(5u, r2OutBuf[0]); // out (5 + feedbackIn)
+  ASSERT_EQ(0u, r2OutBuf[1]); // feedbackIn from R4; delay=1
 
   // Validate R3
-  ASSERT_EQ(2u, r3OutBuf[1]); // feedForwardIn from R1; delay=0
-  ASSERT_EQ(5u, r3OutBuf[2]); // lateralIn from R4; delay=1
-  ASSERT_EQ(7u, r3OutBuf[0]); // out (feedForwardIn + lateralIn)
+  ASSERT_EQ(1u, r3OutBuf[0]); // out (feedForwardIn + lateralIn)
+  ASSERT_EQ(1u, r3OutBuf[1]); // feedForwardIn from R1; delay=0
+  ASSERT_EQ(0u, r3OutBuf[2]); // lateralIn from R4; delay=1
 
   // Validate R4
-  ASSERT_EQ(10u, r4OutBuf[1]); // feedForwardIn from R2; delay=0
+  ASSERT_EQ(6u, r4OutBuf[0]); // out (feedForwardIn + lateralIn)
+  ASSERT_EQ(5u, r4OutBuf[1]); // feedForwardIn from R2; delay=0
   ASSERT_EQ(1u, r4OutBuf[2]);  // lateralIn from R3; delay=1
-  ASSERT_EQ(11u, r4OutBuf[0]); // out (feedForwardIn + lateralIn)
 
   // ITERATION #3
   net.run(1);
 
   // Validate R1
-  ASSERT_EQ(7u, r1OutBuf[1]); // feedbackIn from R3; delay=1
-  ASSERT_EQ(8u, r1OutBuf[0]); // out (1 + feedbackIn)
+  ASSERT_EQ(2u, r1OutBuf[0]); // out (1 + feedbackIn)
+  ASSERT_EQ(1u, r1OutBuf[1]); // feedbackIn from R3; delay=1
 
   // Validate R2
-  ASSERT_EQ(11u, r2OutBuf[1]); // feedbackIn from R4; delay=1
-  ASSERT_EQ(16u, r2OutBuf[0]); // out (5 + feedbackIn)
+  ASSERT_EQ(10u, r2OutBuf[0]); // out (5 + feedbackIn)
+  ASSERT_EQ(5u,  r2OutBuf[1]); // feedbackIn from R4; delay=1
 
   // Validate R3
-  ASSERT_EQ(8u, r3OutBuf[1]);  // feedForwardIn from R1; delay=0
-  ASSERT_EQ(11u, r3OutBuf[2]); // lateralIn from R4; delay=1
-  ASSERT_EQ(19u, r3OutBuf[0]); // out (feedForwardIn + lateralIn)
+  ASSERT_EQ(7u, r3OutBuf[0]); // out (feedForwardIn + lateralIn)
+  ASSERT_EQ(2u, r3OutBuf[1]); // feedForwardIn from R1; delay=0
+  ASSERT_EQ(5u, r3OutBuf[2]); // lateralIn from R4; delay=1
 
   // Validate R4
-  ASSERT_EQ(16u, r4OutBuf[1]); // feedForwardIn from R2; delay=0
-  ASSERT_EQ(7u, r4OutBuf[2]);  // lateralIn from R3; delay=1
-  ASSERT_EQ(23u, r4OutBuf[0]); // out (feedForwardIn + lateralIn)
+  ASSERT_EQ(11u, r4OutBuf[0]); // out (feedForwardIn + lateralIn)
+  ASSERT_EQ(10u, r4OutBuf[1]); // feedForwardIn from R2; delay=0
+  ASSERT_EQ(1u,  r4OutBuf[2]);  // lateralIn from R3; delay=1
+
+  // ITERATION #4
+  net.run(1);
+
+  // Validate R1
+  ASSERT_EQ(2u, r1OutBuf[0]); // out (1 + feedbackIn)
+  ASSERT_EQ(1u, r1OutBuf[1]); // feedbackIn from R3; delay=1
+
+  // Validate R2
+  ASSERT_EQ(11u, r2OutBuf[0]); // out (5 + feedbackIn)
+  ASSERT_EQ(6u,  r2OutBuf[1]); // feedbackIn from R4; delay=1
+
+  // Validate R3
+  ASSERT_EQ(8u,  r3OutBuf[0]); // out (feedForwardIn + lateralIn)
+  ASSERT_EQ(2u,  r3OutBuf[1]);  // feedForwardIn from R1; delay=0
+  ASSERT_EQ(6u,  r3OutBuf[2]); // lateralIn from R4; delay=1
+
+  // Validate R4
+  ASSERT_EQ(18u, r4OutBuf[0]); // out (feedForwardIn + lateralIn)
+  ASSERT_EQ(11u, r4OutBuf[1]); // feedForwardIn from R2; delay=0
+  ASSERT_EQ(7u,  r4OutBuf[2]);  // lateralIn from R3; delay=1
 }
 
 TEST(LinkTest, L2L4With1ColDelayedLinksAndPhase1OnOffOn) {
@@ -1051,13 +1055,13 @@ TEST(LinkTest, L2L4With1ColDelayedLinksAndPhase1OnOffOn) {
   net.run(1);
 
   // Validate R1
-  ASSERT_EQ(0u, r1OutBuf[1]); // feedbackIn from R3; delay=1
   ASSERT_EQ(1u, r1OutBuf[0]); // out (1 + feedbackIn)
+  ASSERT_EQ(0u, r1OutBuf[1]); // feedbackIn from R3; delay=1
 
   // Validate R3
+  ASSERT_EQ(1u, r3OutBuf[0]); // out (feedForwardIn + lateralIn)
   ASSERT_EQ(1u, r3OutBuf[1]); // feedForwardIn from R1; delay=0
   ASSERT_EQ(0u, r3OutBuf[2]); // lateralIn loopback from R3; delay=1
-  ASSERT_EQ(1u, r3OutBuf[0]); // out (feedForwardIn + lateralIn)
 
   // Disable Phase 1, containing R1
   net.setMinEnabledPhase(2);
@@ -1070,21 +1074,21 @@ TEST(LinkTest, L2L4With1ColDelayedLinksAndPhase1OnOffOn) {
   ASSERT_EQ(1u, r1OutBuf[0]); // out
 
   // Validate R3
+  ASSERT_EQ(1u, r3OutBuf[0]); // out (feedForwardIn + lateralIn)
   ASSERT_EQ(1u, r3OutBuf[1]); // feedForwardIn from R1; delay=0
-  ASSERT_EQ(1u, r3OutBuf[2]); // lateralIn loopback from R3; delay=1
-  ASSERT_EQ(2u, r3OutBuf[0]); // out (feedForwardIn + lateralIn)
+  ASSERT_EQ(0u, r3OutBuf[2]); // lateralIn loopback from R3; delay=1
 
   // ITERATION #3 with Phase 1 disabled
   net.run(1);
 
   // Validate R1 (it's in a disabled phase, so should be stuck at prior values)
-  ASSERT_EQ(0u, r1OutBuf[1]); // feedbackIn
   ASSERT_EQ(1u, r1OutBuf[0]); // out
+  ASSERT_EQ(0u, r1OutBuf[1]); // feedbackIn
 
   // Validate R3
+  ASSERT_EQ(2u, r3OutBuf[0]); // out (feedForwardIn + lateralIn)
   ASSERT_EQ(1u, r3OutBuf[1]); // feedForwardIn from R1; delay=0
-  ASSERT_EQ(2u, r3OutBuf[2]); // lateralIn loopback from R3; delay=1
-  ASSERT_EQ(3u, r3OutBuf[0]); // out (feedForwardIn + lateralIn)
+  ASSERT_EQ(1u, r3OutBuf[2]); // lateralIn loopback from R3; delay=1
 
   // Enable Phase 1, containing R1
   net.setMinEnabledPhase(1);
@@ -1093,25 +1097,25 @@ TEST(LinkTest, L2L4With1ColDelayedLinksAndPhase1OnOffOn) {
   net.run(1);
 
   // Validate R1
-  ASSERT_EQ(3u, r1OutBuf[1]); // feedbackIn from R3; delay=1
-  ASSERT_EQ(4u, r1OutBuf[0]); // out (1 + feedbackIn)
+  ASSERT_EQ(2u, r1OutBuf[0]); // out (1 + feedbackIn)
+  ASSERT_EQ(1u, r1OutBuf[1]); // feedbackIn from R3; delay=1
 
   // Validate R3
-  ASSERT_EQ(4u, r3OutBuf[1]); // feedForwardIn from R1; delay=0
-  ASSERT_EQ(3u, r3OutBuf[2]); // lateralIn loopback from R3; delay=1
-  ASSERT_EQ(7u, r3OutBuf[0]); // out (feedForwardIn + lateralIn)
+  ASSERT_EQ(3u, r3OutBuf[0]); // out (feedForwardIn + lateralIn)
+  ASSERT_EQ(2u, r3OutBuf[1]); // feedForwardIn from R1; delay=0
+  ASSERT_EQ(1u, r3OutBuf[2]); // lateralIn loopback from R3; delay=1
 
   // ITERATION #5 with all phases enabled
   net.run(1);
 
   // Validate R1
-  ASSERT_EQ(7u, r1OutBuf[1]); // feedbackIn from R3; delay=1
-  ASSERT_EQ(8u, r1OutBuf[0]); // out (1 + feedbackIn)
+  ASSERT_EQ(3u, r1OutBuf[0]); // out (1 + feedbackIn)
+  ASSERT_EQ(2u, r1OutBuf[1]); // feedbackIn from R3; delay=1
 
   // Validate R3
-  ASSERT_EQ(8u, r3OutBuf[1]);  // feedForwardIn from R1; delay=0
-  ASSERT_EQ(7u, r3OutBuf[2]);  // lateralIn loopback from R3; delay=1
-  ASSERT_EQ(15u, r3OutBuf[0]); // out (feedForwardIn + lateralIn)
+  ASSERT_EQ(5u, r3OutBuf[0]); // out (feedForwardIn + lateralIn)
+  ASSERT_EQ(3u, r3OutBuf[1]);  // feedForwardIn from R1; delay=0
+  ASSERT_EQ(2u, r3OutBuf[2]);  // lateralIn loopback from R3; delay=1
 }
 
 TEST(LinkTest, SingleL4RegionWithDelayedLoopbackInAndPhaseOnOffOn) {
@@ -1127,6 +1131,12 @@ TEST(LinkTest, SingleL4RegionWithDelayedLoopbackInAndPhaseOnOffOn) {
   // o Run 1 time step with phase 1 enabled
   // o Disable phase 1 and run two time steps
   // o Enable phase 1 and run two time steps
+  //
+  // #1  R1.compute : feedbackIn = [UInt64 2(0 0)] out = [UInt64 2(1 0)]
+  // #2 disabled
+  // #3 disabled
+  // #4  R1.compute : feedbackIn = [UInt64 2(0 0)] out = [UInt64 2(1 0)]
+  // #5  R1.compute : feedbackIn = [UInt64 2(1 0)] out = [UInt64 2(2 1)]
 
   Network net;
 
@@ -1190,14 +1200,14 @@ TEST(LinkTest, SingleL4RegionWithDelayedLoopbackInAndPhaseOnOffOn) {
   net.run(1);
 
   // Validate R1
-  ASSERT_EQ(1u, r1OutBuf[1]); // feedbackIn from R3; delay=1
-  ASSERT_EQ(2u, r1OutBuf[0]); // out (1 + feedbackIn)
+  ASSERT_EQ(0u, r1OutBuf[1]); // feedbackIn from R3; delay=1
+  ASSERT_EQ(1u, r1OutBuf[0]); // out (1 + feedbackIn)
 
   // ITERATION #5 with phase 1 enabled
   net.run(1);
 
   // Validate R1
-  ASSERT_EQ(2u, r1OutBuf[1]); // feedbackIn from R3; delay=1
-  ASSERT_EQ(3u, r1OutBuf[0]); // out (1 + feedbackIn)
+  ASSERT_EQ(1u, r1OutBuf[1]); // feedbackIn from R3; delay=1
+  ASSERT_EQ(2u, r1OutBuf[0]); // out (1 + feedbackIn)
 }
 }

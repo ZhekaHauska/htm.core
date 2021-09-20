@@ -121,6 +121,14 @@ This is obsolete. Use getRegion('name') instead.
   | VectorFileEffector          | FileOutputRegion        |
   | VectorFileSensor            | FileInputRegion         |
 
+* Timing for data move  PR# 956
+  Originally data is moved from output to input through the links just before executing a region.
+  Now, the data is moved just after execution of a region. The effect is that the internal values 
+  of the Input buffers between iterations was the value just used in the previous execute.  It is 
+  now the input buffer contains the value to be used by the next execution.
+  
+  There should be no effect on applications unless they are looking at the values of the internal
+  input buffers.
 
 ## Python API Changes
 
@@ -143,3 +151,9 @@ mostly just a thin wrapper around the C++ library.
   Recommend reading the documentation, see `python -m pydoc htm`
 
 - Parameters containing strings were originally defined in the NetworkAPI Spec as a byte array (i.e. type "Byte" and count 0).  Byte arrays are now 8 bit integers and strings use type "String" and count 1.
+
+- Classifier::learn(SDR, label)
+  The `label` argument can now be an unsigned integer (the label index) or it can be a vector containing a set of label indexes that relate to this pattern.
+  This was done because syntax such as `{4}` passed as the label, intended to create a vector with one element, is now being rejected by at least one compiler.  
+  So, just pass the label index directly if there is only one. 
+  

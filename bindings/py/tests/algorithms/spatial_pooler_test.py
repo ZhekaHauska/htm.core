@@ -238,9 +238,9 @@ class SpatialPoolerTest(unittest.TestCase):
      
      # The SP now has some data in it, try serialization.  
      file = "spatial_pooler_test_save2.bin"
-     sp.saveToFile(file)
+     sp.saveToFile(file, "PORTABLE")
      sp3 = SP()
-     sp3.loadFromFile(file)
+     sp3.loadFromFile(file, "PORTABLE")
      self.assertEqual(str(sp), str(sp3), "HTM SpatialPooler serialization (using saveToFile/loadFromFile) failed.")
      os.remove(file)
 

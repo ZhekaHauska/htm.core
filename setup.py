@@ -167,6 +167,7 @@ class TestCommand(BaseTestCommand):
     import pytest
     cwd = os.getcwd()
     errno = 0
+    os.chdir(REPO_DIR)
     # run c++ tests (from python)
     cpp_tests = os.path.join(REPO_DIR, "build", "Release", "bin", "unit_tests")
     subprocess.check_call([cpp_tests])

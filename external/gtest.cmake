@@ -34,7 +34,7 @@
 if(EXISTS "${REPOSITORY_DIR}/build/ThirdParty/share/googletest.tar.gz")
     set(URL "${REPOSITORY_DIR}/build/ThirdParty/share/googletest.tar.gz")
 else()
-    set(URL https://github.com/abseil/googletest/archive/release-1.10.0.tar.gz)
+    set(URL https://github.com/google/googletest/archive/release-1.10.0.tar.gz)
 endif()
 
 #

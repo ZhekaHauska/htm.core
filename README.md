@@ -420,16 +420,16 @@ distribution packages as listed and rename them as indicated. Copy these to
 
 | Name to give it        | Where to obtain it |
 | :--------------------- | :----------------- |
-| libyaml.zip   (*node1) | https://github.com/yaml/libyaml/archive/master.zip |
+| libyaml.zip   (*note1) | https://github.com/yaml/libyaml/archive/acd6f6f014c25e46363e718381e0b35205df2d83.zip |
 | boost.tar.gz  (*note3) | https://dl.bintray.com/boostorg/release/1.72.0/source/boost_1_72_0.tar.gz | 
-| eigen.tar.bz2          | https://gitlab.com/libeigen/eigen/-/archive/3.3.7/eigen-3.3.7.tar.bz2 |
-| googletest.tar.gz      | https://github.com/abseil/googletest/archive/release-1.8.1.tar.gz |
-| mnist.zip     (*note4) | https://github.com/wichtounet/mnist/archive/master.zip |
-| pybind11.tar.gz        | https://github.com/pybind/pybind11/archive/v2.4.2.tar.gz |
-| cereal.tar.gz          | https://github.com/USCiLab/cereal/archive/v1.2.2.tar.gz |
-| sqlite3.tar.gz         | https://www.sqlite.org/2020/sqlite-autoconf-3320300.tar.gz |
-| digestpp.zip           | https://github.com/kerukuro/digestpp/archive/36fa6ca2b85808bd171b13b65a345130dbe1d774.zip |
-| cpp-httplib.zip(*node4)| https://github.com/yhirose/cpp-httplib/archive/v0.7.6.zip |
+| googletest.tar.gz      | https://github.com/google/googletest/archive/release-1.10.0.tar.gz |
+| eigen.tar.bz2          | https://gitlab.com/libeigen/eigen/-/archive/3.3.9/eigen-3.3.9.tar.bz2 |
+| mnist.zip     (*note4) | https://github.com/wichtounet/mnist/archive/3b65c35ede53b687376c4302eeb44fdf76e0129b.zip |
+| pybind11.tar.gz        | https://github.com/pybind/pybind11/archive/v2.6.2.tar.gz |
+| cereal.tar.gz          | https://github.com/USCiLab/cereal/archive/v1.3.0.tar.gz |
+| sqlite3.tar.gz         | https://www.sqlite.org/2021/sqlite-autoconf-3340100.tar.gz |
+| digestpp.zip           | https://github.com/kerukuro/digestpp/archive/34ff2eeae397ed744d972d86b5a20f603b029fbd.zip |
+| cpp-httplib.zip(*note4)| https://github.com/yhirose/cpp-httplib/archive/v0.8.4.zip |
 
  * note1: Version 0.2.2 of libyaml is broken so use the master for the repository.
  * note3: Boost is not required for any compiler that supports C++17 with `std::filesystem` (MSVC2017, gcc-8, clang-9).

@@ -307,7 +307,7 @@ public:
    * the links that are attached to each input.
    */
   void prepareInputs();
-
+  void pushOutputsOverLinks();
   /**
    * Get the input data.
    *
@@ -543,8 +543,9 @@ private:
   //Region(Region &){}  // copy not allowed
 
   // local functions
-  void createInputsAndOutputs_();
-  void getOutputBuffers_(std::map<std::string, Array>& buffers) const;
+  void createInputs_();
+  void createOutputs_();
+  void getOutputBuffers_(std::map<std::string, Array> &buffers) const;
   void restoreOutputBuffers_(const std::map<std::string, Array>& buffers);
   void getDims_(std::map<std::string,Dimensions>& outDims,
                std::map<std::string,Dimensions>& inDims) const;

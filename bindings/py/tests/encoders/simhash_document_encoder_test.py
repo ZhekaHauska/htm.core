@@ -24,6 +24,7 @@ import pytest
 import random
 import sys
 import unittest
+import os
 
 from htm.bindings.encoders import SimHashDocumentEncoder, \
     SimHashDocumentEncoderParameters
@@ -231,7 +232,6 @@ class SimHashDocumentEncoder_Test(unittest.TestCase):
         assert(output4 != output5)
 
     # Test de/serialization via Pickle method
-    @pytest.mark.skipif(sys.version_info < (3, 6), reason="Fails for python2 with segmentation fault")
     def testSerializePickle(self):
         vocab = {
             "hear": 2, "nothing": 4, "but": 1, "a": 1, "rushing": 4,
@@ -256,6 +256,41 @@ class SimHashDocumentEncoder_Test(unittest.TestCase):
         assert(enc1.parameters.size == enc2.parameters.size)
         assert(enc1.parameters.activeBits == enc2.parameters.activeBits)
         assert(output1 == output2)
+        
+    # Test de/serialization via saveToFile() and loadFromFile() methods
+    def testSerializeToFile(self):
+        vocab = {
+            "hear": 2, "nothing": 4, "but": 1, "a": 1, "rushing": 4,
+            "sound": 3}
+        document = [
+            "hear", "any", "sound", "sound", "louder", "but", "walls"]
+
+        params = SimHashDocumentEncoderParameters()
+        params.size = 400
+        params.sparsity = 0.33
+        params.encodeOrphans = True
+        params.vocabulary = vocab
+
+        enc1 = SimHashDocumentEncoder(params)
+        # The SimHashDocumentEncoder now has some data in it, try serialization.
+        file = "SimHashDocumentEncoder_test_save2.json"
+        enc1.saveToFile(file, "JSON")
+        output1 = enc1.encode(document)
+        
+        # change the parameters so we know the params were replaced from contents in file.
+        # Note: we should have a constructor without parameters for this situation.
+        params.size = 10
+        params.sparsity = 0.5  
+        enc2 = SimHashDocumentEncoder(params)
+        enc2.loadFromFile(file, "JSON")
+        os.remove(file)
+        
+        output2 = enc2.encode(document)
+        assert(enc1.size == enc2.size)
+        assert(enc1.parameters.size == enc2.parameters.size)
+        assert(enc1.parameters.activeBits == enc2.parameters.activeBits)
+        
+        
 
     # Test de/serialization via String
     def testSerializeString(self):
@@ -284,7 +319,7 @@ class SimHashDocumentEncoder_Test(unittest.TestCase):
         assert(enc1.parameters.activeBits != enc2.parameters.activeBits)
 
         enc2.loadFromString(serialized)
-        output2 = enc1.encode(document)
+        output2 = enc2.encode(document)
 
         assert(enc1.size == enc2.size)
         assert(enc1.parameters.size == enc2.parameters.size)

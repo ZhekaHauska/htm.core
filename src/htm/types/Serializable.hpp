@@ -224,8 +224,7 @@ public:
 
 
 
-
-  virtual inline void saveToFile(std::string filePath, SerializableFormat fmt=SerializableFormat::BINARY) const {
+  virtual inline void saveToFile(std::string filePath, SerializableFormat fmt) const {
     std::string dirPath = Path::getParent(filePath);
 	  Directory::create(dirPath, true, true);
 		std::ios_base::openmode mode = std::ios_base::out;
@@ -236,6 +235,19 @@ public:
 		save(out, fmt);
 		out.close();
 	}
+  virtual inline void saveToFile(std::string filePath) const {
+    // pybind11 was having problems with the default so I am making it a separate overload.
+    saveToFile(filePath, SerializableFormat::BINARY);
+  }
+  virtual inline void saveToFile(std::string filePath, std::string fmt) const {
+    SerializableFormat fmt1;
+    if      (fmt == "BINARY")   fmt1 =  SerializableFormat::BINARY;
+    else if (fmt == "PORTABLE") fmt1 =  SerializableFormat::PORTABLE;
+    else if (fmt == "JSON")     fmt1 =  SerializableFormat::JSON;
+    else if (fmt == "XML")      fmt1 =  SerializableFormat::XML;
+    else NTA_THROW << "saveToFile(): Invalid serialization format. Expecting 'BINARY', 'PORTABLE', 'JSON', or 'XML'.";
+    saveToFile(filePath, fmt1);
+  }  
 
   // NOTE: for BINARY and PORTABLE the stream must be ios_base::binary or it will crash on Windows.
   virtual inline void save(std::ostream &out, SerializableFormat fmt=SerializableFormat::BINARY) const {
@@ -267,7 +279,7 @@ public:
 		}
   }
 
-  virtual inline void loadFromFile(std::string filePath, SerializableFormat fmt=SerializableFormat::BINARY) {
+  virtual inline void loadFromFile(std::string filePath, SerializableFormat fmt) {
 		std::ios_base::openmode mode = std::ios_base::in;
 		if (fmt <= SerializableFormat::PORTABLE) mode |= std::ios_base::binary;
 	  std::ifstream in(filePath, mode);
@@ -277,6 +289,21 @@ public:
 		load(in, fmt);
 		in.close();
 	}
+  virtual inline void loadFromFile(std::string filePath) {
+    // pybind11 was having problems with the default so I am making it a separate function.
+    loadFromFile(filePath, SerializableFormat::BINARY);
+  }
+  virtual inline void loadFromFile(std::string filePath, std::string fmt) {
+    SerializableFormat fmt1;
+    if      (fmt == "BINARY")   fmt1 =  SerializableFormat::BINARY;
+    else if (fmt == "PORTABLE") fmt1 =  SerializableFormat::PORTABLE;
+    else if (fmt == "JSON")     fmt1 =  SerializableFormat::JSON;
+    else if (fmt == "XML")      fmt1 =  SerializableFormat::XML;
+    else NTA_THROW << "loadFromFile(): Invalid serialization format. Expecting 'BINARY', 'PORTABLE', 'JSON', or 'XML'.";
+
+    loadFromFile(filePath, fmt1);
+  }  
+
   // NOTE: for BINARY and PORTABLE the stream must opened with ios_base::binary or it will crash on Windows.
   //       Stream exceptions should NOT be set.
 	virtual inline void load(std::istream &in,  SerializableFormat fmt=SerializableFormat::BINARY) {

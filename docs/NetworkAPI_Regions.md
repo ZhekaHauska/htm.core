@@ -260,7 +260,7 @@ active columns and simultaneously updates its permanence, duty cycles, etc.
           columns to inputs.</td><td> ReadWrite </td><td> Boolean </td><td> true </td></tr>
 <tr><td> spInputNonZeros  </td><td>The indices of the non-zero inputs to the spatial pooler. </td><td> ReadOnly </td><td> SDR </td><td>  </td></tr>
 <tr><td> spOutputNonZeros  </td><td>The indices of the non-zero outputs from the spatial pooler </td><td> ReadOnly </td><td> SDR </td><td>  </td></tr>
-<tr><td> learningMode  </td><td>True if the node is in learning mode.</td><td> ReadWrite </td><td> Boolean </td><td> true </td></tr>
+<tr><td> learningMode  </td><td>Expecting 1 if the node is in learning mode. Otherwise 0.</td><td> ReadWrite </td><td> UInt32 </td><td> 1 </td></tr>
 <tr><td> activeOutputCount  </td><td>Number of active elements in bottomUpOut output.</td><td> ReadOnly </td><td> UInt32 </td><td> 0 </td></tr>
 </table>
  

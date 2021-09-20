@@ -115,6 +115,8 @@ void Input::initialize() {
    * During initialization,
    *    Network calls evaluateLinks() for each region.
    *    Region calls initialize() for each input.
+   *    The objective is to establish the dimensions on each
+   *    input and output buffer and create them.
    *
    * Determine the Dimensions.
    * The link and region need to be consistent at both
@@ -132,11 +134,11 @@ void Input::initialize() {
    * 4. Ask source for it's size, this is the next priority. This
    *    would most likely be from configuration.  If it returns
    *    an empty dimension, set it to don't care (size=1, value[0] = 0).
-   * 5. If not Fan-IN, one side is don't care, set the dimensions to the
+   * 5. If not Fan-IN or overwrite, one side is don't care, set the dimensions to the
    *    dimension of the other. If D's on both ends of the link are don't care,
    *    declare "undefined" error. If D's on both ends of the link are not equal,
    *    declare "conflict" error.
-   * 6. If Fan-IN,
+   * 6. If Fan-IN and not overwrite,
    *  a. consider the number of dimensions. If this is a default
    *     input on the destination region, make the source
    *     dimensions compatable with the destination region's
@@ -152,8 +154,12 @@ void Input::initialize() {
    *  c. If the destination input buffer had been originally
    *     specified, error if the new dimensions are not compatable.
    */
-  if (initialized_)
+
+  // This is called for each input (destination) that has a link attached.
+  if (initialized_) {
+    // Already processed...skip it
     return;
+  }
 
 
   const std::shared_ptr<Spec> &destSpec = region_->getSpec();
@@ -162,14 +168,30 @@ void Input::initialize() {
   size_t maxD = 1;
   Dimensions d;
   Dimensions inD = dim_;
-  bool is_FanIn = links_.size() > 1;
+  bool is_FanIn = links_.size() > 1; // a link is FanIn if there are more than one link for an input.
+  bool is_Overwrite = false;         // An optional link parameter
+  // if any link input(is a destination) has a link parameter of 'mode' = 'overwrite' then 
+  // all links to this input buffer must be overwrite mode.
+  // The 'overwrite' mode is a link parameter and it is already parsed in Link.
+  for (auto link : links_) {
+    if (link->is_Overwrite()) {
+      is_Overwrite = true;
+      break;
+    }
+  }
+  if (is_Overwrite) {
+    for (auto link : links_) {
+      link->set_Overwrite(true);
+    }
+  }
+
 
   // First determine the original configuration for destination dimensions.
   // Most of the time we get our input dimensions from a connected output
   // but here we want to see if there was an override.
   // Normally this will be 'don't care' if there is no override.
   if (!inD.isSpecified()) {
-    // ask the spec for destination region.
+    // ask the spec of the destination region.
     UInt32 count = destSpec->inputs.getByName(name_).count;
     if (count > 0) {
       inD.push_back(count); // fixed count in spec
@@ -201,13 +223,26 @@ void Input::initialize() {
 
       out->initialize(); // creates the output buffers.
 
+
       // Initialize Link.  'total_width' at this point is the byte offset
       // into the input buffer where the output will start writing.
+      // FanIn without Overwrite means that each input is assigned an adjacent section 
+      // of the input buffer.  All of the bits coming from the source are next
+      // to each other such that an output writes its data into a different portion of 
+      // the input buffer.
+      // If only one link (not FanIn) or 'overwrite' mode option is specified, 
+      // all sources write their bits into the input buffer starting at bit 0.
       link->initialize(total_width, is_FanIn);
-      total_width += (UInt32)d.getCount();
+      if (is_FanIn && !is_Overwrite) {
+        total_width += (UInt32)d.getCount();
+      }
 
-      if (is_FanIn) {
+      if (is_FanIn && !is_Overwrite) {
+        // There are multiple sources for this input buffer.
         // save some info, we will need it later.
+        // Dimensions of the outputs can be different dimensions.
+        // We need to derive the input buffer's dimensions based
+        // on the combination of the connected output buffers.
         Ds.push_back(d);
         size_t n = d.size();
         while (n > maxD && d[n - 1] == 1)
@@ -215,7 +250,9 @@ void Input::initialize() {
         if (n > maxD)
           maxD = n;
       } else {
-        // Not a FanIn.
+        // Not a FanIn or is Overwrite.
+        // In this case, if there is more than one source buffer, they all must be the same size.
+        // Or, if the destination buffer is already specified, it must be the same as source.
         if (inD.isSpecified()) {
           NTA_CHECK(inD.getCount() == d.getCount())
               << "Dimensions were specified for input "
@@ -227,9 +264,11 @@ void Input::initialize() {
           inD = d;  // set the destination dimensions to be same as source.
         }
       }
+      //NTA_DEBUG << "    from: " << out->getRegion()->getName() << "." << out->getName() << " " << d << std::endl;
+
     }
 
-    if (is_FanIn) {
+    if (is_FanIn && !is_Overwrite) {
       // Try to figure out the destination dimensions derived
       // from the source dimensions. If any source dimension other
       // than the top level did not match we will have to flatten
@@ -314,6 +353,8 @@ void Input::initialize() {
     data_.allocateBuffer(dim_.getCount());
     data_.zeroBuffer();
   }
+
+  //NTA_DEBUG << "    to: " << region_->getName() << "." << name_ <<" dim:" << dim_ << std::endl;
 
   initialized_ = true;
 }

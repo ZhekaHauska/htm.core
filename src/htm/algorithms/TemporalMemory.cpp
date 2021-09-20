@@ -390,12 +390,6 @@ void TemporalMemory::activateDendrites(const bool learn,
   }
   const auto compareSegments = [&](const Segment a, const Segment b) { return connections.compareSegments(a, b); };
   std::sort( activeSegments_.begin(), activeSegments_.end(), compareSegments); //SDR requires sorted when constructed from activeSegments_
-  // Update segment bookkeeping.
-  if (learn) {
-    for (const auto segment : activeSegments_) {
-      connections_.dataForSegment(segment).lastUsed = connections.iteration(); //TODO the destroySegments based on LRU is expensive. Better random? or "energy" based on sum permanences?
-    }
-  }
 
   // Matching segments, potential synapses.
   matchingSegments_.clear();

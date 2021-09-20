@@ -113,6 +113,13 @@ public:
    */
   bool hasOutgoingLinks();
 
+  const std::set<std::shared_ptr<Link>> getLinks() const { return links_; };
+
+  /**
+   * Distribute the output to the connected inputs.
+   */
+  void push();
+
   /**
    * Get the data of the output.
    * @returns
