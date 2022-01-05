@@ -71,7 +71,7 @@ def setCompare(a, b, aKey=None, bKey=None, leftMinusRight=False, rightMinusLeft=
         bWithinAMask = np.in1d(bKey, aKey)
 
         if leftMinusRight:
-            return (a[aWithinBMask], a[~aWithinBMask], b[bWithinAMask])
+            return (a[aWithinBMask], a[~aWithinBMask], b[~bWithinAMask])
         else:
             return (a[aWithinBMask], b[~bWithinAMask])
     elif leftMinusRight:
