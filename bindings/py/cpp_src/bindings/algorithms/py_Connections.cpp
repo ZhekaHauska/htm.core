@@ -87,6 +87,9 @@ R"(Compatibility Warning: This classes API is unstable and may change without wa
 
     py_Connections.def("presynapticCellsForSegment", &Connections::presynapticCellsForSegment,
       py::arg("segment"));
+    
+    py_Connections.def("connectedPresynapticCellsForSegment", &Connections::connectedPresynapticCellsForSegment,
+      py::arg("segment"));
 
     py_Connections.def("segmentForSynapse", &Connections::segmentForSynapse);
 

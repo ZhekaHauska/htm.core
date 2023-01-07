@@ -456,6 +456,13 @@ public:
    **/
   std::vector<CellIdx> presynapticCellsForSegment(const Segment segment) const;
 
+    /**
+   *  Collect only connected presynaptic cells for segments (inputs)
+   *  @param 
+   *
+   **/
+  std::vector<CellIdx> connectedPresynapticCellsForSegment(const Segment segment) const;
+
   /**
    * Gets the index of this segment on its respective cell.
    *

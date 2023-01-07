@@ -667,6 +667,19 @@ vector<CellIdx> Connections::presynapticCellsForSegment(const Segment segment) c
   return vector<CellIdx>(std::begin(presynCells), std::end(presynCells));
 }
 
+vector<CellIdx> Connections::connectedPresynapticCellsForSegment(const Segment segment) const { //TODO optimize by storing the vector in SegmentData?
+  set<CellIdx> presynCells;
+  for(const auto synapse: synapsesForSegment(segment)) {
+    const auto permanence = dataForSynapse(synapse).permanence;
+    
+    if(permanence > connectedThreshold_) {
+      const auto presynapticCell = dataForSynapse(synapse).presynapticCell;
+      presynCells.insert(presynapticCell);
+    }
+  }
+  return vector<CellIdx>(std::begin(presynCells), std::end(presynCells));
+}
+
 
 void Connections::destroyMinPermanenceSynapses(
                               const Segment segment, 
